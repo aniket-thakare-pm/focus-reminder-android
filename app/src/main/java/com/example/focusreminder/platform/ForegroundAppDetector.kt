@@ -230,7 +230,8 @@ class ForegroundAppDetector(private val context: Context) {
 
     /**
      * Queries accurate foreground usage milliseconds for [packageName] strictly from today's midnight (00:00:00).
-     * Robust multi-tier calculation: Merges live RAM event buffer with persistent OS daily buckets & aggregate stats.
+     * Robust multi-tier calculation: Merges live RAM event buffer with persistent OS daily buckets.
+     * Prevents Android's queryAndAggregateUsageStats interval boundary expansion bug.
      */
     fun getDailyUsageMs(packageName: String): Long {
         val manager = usageStatsManager ?: return 0L
@@ -242,40 +243,35 @@ class ForegroundAppDetector(private val context: Context) {
         }
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
+        val maxPossibleTodayMs = maxOf(0L, nowMs - midnightMs)
 
         // 1. High-precision event calculation (from in-memory buffer)
         val eventMap = queryAccurateDailyUsageMap()
-        val eventMs = eventMap[packageName] ?: 0L
+        val eventMs = minOf(eventMap[packageName] ?: 0L, maxPossibleTodayMs)
 
-        // 2. Query persistent OS daily buckets (contains historical sessions flushed to disk)
+        // 2. Query persistent OS daily buckets strictly for today (no 24h lookback)
         var bucketMs = 0L
         try {
             val list = manager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
-                midnightMs - (24 * 60 * 60 * 1000L),
+                midnightMs,
                 nowMs
             )
             val todayStat = list
-                .filter { it.packageName == packageName && it.lastTimeUsed >= midnightMs }
-                .maxByOrNull { it.firstTimeStamp }
+                ?.filter {
+                    it.packageName == packageName &&
+                            it.lastTimeUsed >= midnightMs &&
+                            it.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)
+                }
+                ?.maxByOrNull { it.firstTimeStamp }
 
             if (todayStat != null) {
-                bucketMs = todayStat.totalTimeInForeground
+                bucketMs = minOf(todayStat.totalTimeInForeground, maxPossibleTodayMs)
             }
         } catch (_: Exception) {}
 
-        // 3. Fallback/Corroboration from aggregated stats
-        var aggregateMs = 0L
-        try {
-            val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-            val stat = aggregated[packageName]
-            if (stat != null && stat.lastTimeUsed >= midnightMs) {
-                aggregateMs = stat.totalTimeInForeground
-            }
-        } catch (_: Exception) {}
-
-        // Crucial: Use maxOf across RAM events, disk buckets, and our persistent high-water mark
-        val rawMaxMs = maxOf(eventMs, bucketMs, aggregateMs)
+        // Crucial: Use maxOf across RAM events and verified today's disk buckets
+        val rawMaxMs = minOf(maxOf(eventMs, bucketMs), maxPossibleTodayMs)
         return highWaterMarkStore.updateHighWaterMarkMs(packageName, rawMaxMs)
     }
 
@@ -293,48 +289,39 @@ class ForegroundAppDetector(private val context: Context) {
         }
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
+        val maxPossibleTodayMs = maxOf(0L, nowMs - midnightMs)
 
         // 1. Event buffer map
         val eventMap = queryAccurateDailyUsageMap()
 
-        // 2. Query OS daily usage buckets
+        // 2. Query OS daily usage buckets strictly for today (no 24h lookback)
         val bucketMap = mutableMapOf<String, Long>()
         try {
             val list = manager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
-                midnightMs - (24 * 60 * 60 * 1000L),
+                midnightMs,
                 nowMs
             )
-            val grouped = list.groupBy { it.packageName }
+            val grouped = list?.groupBy { it.packageName } ?: emptyMap()
             for (pkg in packageNames) {
                 val todayStat = grouped[pkg]
-                    ?.filter { it.lastTimeUsed >= midnightMs }
+                    ?.filter {
+                        it.lastTimeUsed >= midnightMs &&
+                                it.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)
+                    }
                     ?.maxByOrNull { it.firstTimeStamp }
 
                 if (todayStat != null) {
-                    bucketMap[pkg] = todayStat.totalTimeInForeground
-                }
-            }
-        } catch (_: Exception) {}
-
-        // 3. Aggregated stats
-        val aggregateMap = mutableMapOf<String, Long>()
-        try {
-            val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-            for (pkg in packageNames) {
-                val stat = aggregated[pkg]
-                if (stat != null && stat.lastTimeUsed >= midnightMs) {
-                    aggregateMap[pkg] = stat.totalTimeInForeground
+                    bucketMap[pkg] = minOf(todayStat.totalTimeInForeground, maxPossibleTodayMs)
                 }
             }
         } catch (_: Exception) {}
 
         val result = mutableMapOf<String, Int>()
         for (pkg in packageNames) {
-            val eMs = eventMap[pkg] ?: 0L
+            val eMs = minOf(eventMap[pkg] ?: 0L, maxPossibleTodayMs)
             val bMs = bucketMap[pkg] ?: 0L
-            val aMs = aggregateMap[pkg] ?: 0L
-            val rawMs = maxOf(eMs, bMs, aMs)
+            val rawMs = minOf(maxOf(eMs, bMs), maxPossibleTodayMs)
             val verifiedMs = highWaterMarkStore.updateHighWaterMarkMs(pkg, rawMs)
             result[pkg] = (verifiedMs / (1000 * 60)).toInt()
         }
@@ -356,6 +343,7 @@ class ForegroundAppDetector(private val context: Context) {
         }
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
+        val maxPossibleTodayMs = maxOf(0L, nowMs - midnightMs)
 
         // 1. High-precision event calculation across all packages
         val eventMap = queryAccurateDailyUsageMap()
@@ -364,41 +352,33 @@ class ForegroundAppDetector(private val context: Context) {
             .values
             .sum()
 
-        // 2. Daily buckets query with 24h lookback
+        // 2. Daily buckets query strictly for today (no 24h lookback)
         var bucketTotalMs = 0L
         try {
             val list = manager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
-                midnightMs - (24 * 60 * 60 * 1000L),
+                midnightMs,
                 nowMs
             )
-            val grouped = list.groupBy { it.packageName }
+            val grouped = list?.groupBy { it.packageName } ?: emptyMap()
 
             for ((pkg, statsGroup) in grouped) {
                 if (isSystemOrLauncherPackage(pkg)) continue
 
                 val todayStat = statsGroup
-                    .filter { it.lastTimeUsed >= midnightMs }
+                    .filter {
+                        it.lastTimeUsed >= midnightMs &&
+                                it.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)
+                    }
                     .maxByOrNull { it.firstTimeStamp }
 
                 if (todayStat != null) {
-                    bucketTotalMs += todayStat.totalTimeInForeground
+                    bucketTotalMs += minOf(todayStat.totalTimeInForeground, maxPossibleTodayMs)
                 }
             }
         } catch (_: Exception) {}
 
-        // 3. Fallback to aggregated stats
-        var aggregateTotalMs = 0L
-        try {
-            val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-            aggregateTotalMs = aggregated
-                .filterKeys { pkg -> !isSystemOrLauncherPackage(pkg) }
-                .values
-                .filter { it.lastTimeUsed >= midnightMs }
-                .sumOf { it.totalTimeInForeground }
-        } catch (_: Exception) {}
-
-        val rawTotalMs = maxOf(eventTotalMs, bucketTotalMs, aggregateTotalMs)
+        val rawTotalMs = minOf(maxOf(eventTotalMs, bucketTotalMs), maxPossibleTodayMs)
         val verifiedTotalMs = highWaterMarkStore.updateScreenTimeHighWaterMarkMs(rawTotalMs)
         return (verifiedTotalMs / (1000 * 60)).toInt()
     }

@@ -1,6 +1,14 @@
 # Focus & Reminder — Version Changelog
 
-### v1.6.0 (Current) — 2026-10-25
+### v1.6.1 (Current) — 2026-10-25
+* **Type:** Patch / Usage Over-Counting Fix & High-Water Mark Cache Reset
+* **Summary:**
+  - **Eradicated `queryAndAggregateUsageStats`:** Permanently removed calls to `manager.queryAndAggregateUsageStats()`, which Android OS implements by expanding time intervals to whole daily disk bucket boundaries, inadvertently aggregating yesterday's usage into today's tally (e.g. 2.5h + 2.5h = 5h).
+  - **Strict Today-Only Bucket Isolation:** Daily bucket queries (`UsageStatsManager.INTERVAL_DAILY`) now query strictly from today's midnight (`[midnightMs, nowMs]`) without 24-hour lookback, and explicitly filter out yesterday's bucket files using `firstTimeStamp >= midnightMs - 4h`.
+  - **Hard Sanity Ceiling:** Clamped reported daily usage per-app and device screen time to the physical maximum possible today (`minOf(usageMs, nowMs - midnightMs)`), guaranteeing mathematically that usage can never exceed elapsed time since midnight.
+  - **Automated High-Water Mark Invalidation (`Store Version 2`):** Bumped store schema to version 2, automatically purging previously corrupted inflated records on launch, and rejecting any cache entries exceeding today's elapsed wall-clock time.
+
+### v1.6.0 — 2026-10-25
 * **Type:** Feature Release / Persistent High-Water Mark Store & Service Resuscitation
 * **Summary:**
   - **Persistent High-Water Mark Store (`DailyUsageHighWaterMarkStore`):** Added local database layer ensuring daily usage is strictly monotonic. Once minutes are verified, they are stored locally and can mathematically never shrink or drop throughout the day, even if the OS purges memory or lags disk flushes.

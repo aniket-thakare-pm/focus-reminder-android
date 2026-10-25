@@ -13,6 +13,7 @@ import java.util.Locale
  * - Prevents Android RAM event buffer evictions from shrinking reported usage late in the day.
  * - Automatically rolls over at midnight (00:00:00) using date keys.
  * - Auto-purges records older than 7 days to maintain a clean storage footprint.
+ * - Auto-wipes corrupted high-water marks from earlier schema versions on startup.
  */
 class DailyUsageHighWaterMarkStore private constructor(context: Context) {
 
@@ -20,6 +21,8 @@ class DailyUsageHighWaterMarkStore private constructor(context: Context) {
         context.getSharedPreferences("daily_usage_high_water_mark_prefs", Context.MODE_PRIVATE)
 
     companion object {
+        private const val CURRENT_VERSION = 2
+        private const val KEY_STORE_VERSION = "store_version"
         private const val PREFIX_USAGE = "usage_"
         private const val PREFIX_SCREEN_TIME = "screen_time_"
         private const val KEY_LAST_CLEANED_DATE = "last_cleaned_date"
@@ -42,6 +45,30 @@ class DailyUsageHighWaterMarkStore private constructor(context: Context) {
         }
     }
 
+    init {
+        val storedVersion = prefs.getInt(KEY_STORE_VERSION, 1)
+        if (storedVersion < CURRENT_VERSION) {
+            // Version upgrade: Flush any corrupted inflated high-water marks from previous versions
+            prefs.edit()
+                .clear()
+                .putInt(KEY_STORE_VERSION, CURRENT_VERSION)
+                .apply()
+        }
+    }
+
+    /**
+     * Resets all recorded high-water marks for [dateKey] (defaults to today).
+     */
+    fun resetTodayCache(dateKey: String = getTodayDateKey()) {
+        val editor = prefs.edit()
+        for (k in prefs.all.keys) {
+            if (k.startsWith("${PREFIX_USAGE}${dateKey}_") || k == "${PREFIX_SCREEN_TIME}$dateKey") {
+                editor.remove(k)
+            }
+        }
+        editor.apply()
+    }
+
     /**
      * Gets the current persistent high-water mark for [packageName] on [dateKey] in milliseconds.
      */
@@ -52,6 +79,7 @@ class DailyUsageHighWaterMarkStore private constructor(context: Context) {
     /**
      * Updates the persistent high-water mark for [packageName] on [dateKey].
      * Returns the monotonic maximum of (current stored, candidate [newUsageMs]).
+     * Discards physically impossible high-water marks that exceed elapsed time today.
      */
     fun updateHighWaterMarkMs(
         packageName: String,
@@ -60,8 +88,19 @@ class DailyUsageHighWaterMarkStore private constructor(context: Context) {
     ): Long {
         val key = "${PREFIX_USAGE}${dateKey}_$packageName"
         val current = prefs.getLong(key, 0L)
-        val verifiedMax = maxOf(current, newUsageMs)
-        if (verifiedMax > current) {
+
+        // Sanity check: Daily usage cannot exceed wall-clock time elapsed since today's midnight
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val elapsedTodayMs = maxOf(0L, System.currentTimeMillis() - cal.timeInMillis)
+        val validCurrent = if (dateKey == getTodayDateKey() && current > elapsedTodayMs) 0L else current
+
+        val verifiedMax = maxOf(validCurrent, minOf(newUsageMs, elapsedTodayMs))
+        if (verifiedMax > current || (current > elapsedTodayMs)) {
             prefs.edit().putLong(key, verifiedMax).apply()
         }
         checkAndCleanOldDays(dateKey)
@@ -85,8 +124,18 @@ class DailyUsageHighWaterMarkStore private constructor(context: Context) {
     ): Long {
         val key = "${PREFIX_SCREEN_TIME}$dateKey"
         val current = prefs.getLong(key, 0L)
-        val verifiedMax = maxOf(current, newScreenTimeMs)
-        if (verifiedMax > current) {
+
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val elapsedTodayMs = maxOf(0L, System.currentTimeMillis() - cal.timeInMillis)
+        val validCurrent = if (dateKey == getTodayDateKey() && current > elapsedTodayMs) 0L else current
+
+        val verifiedMax = maxOf(validCurrent, minOf(newScreenTimeMs, elapsedTodayMs))
+        if (verifiedMax > current || (current > elapsedTodayMs)) {
             prefs.edit().putLong(key, verifiedMax).apply()
         }
         checkAndCleanOldDays(dateKey)
