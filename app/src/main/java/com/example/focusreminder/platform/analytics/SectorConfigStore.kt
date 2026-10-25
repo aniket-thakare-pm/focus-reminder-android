@@ -2,11 +2,12 @@ package com.example.focusreminder.platform.analytics
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.focusreminder.domain.model.BufferGoal
 import com.example.focusreminder.domain.model.TimeSector
 import java.util.Calendar
 
 /**
- * Manages customizable time-of-day sector definitions and sleep/wake buffer goals.
+ * Manages customizable time-of-day sector definitions and custom focus buffer goals.
  */
 class SectorConfigStore private constructor(context: Context) {
 
@@ -25,8 +26,10 @@ class SectorConfigStore private constructor(context: Context) {
         const val COLOR_EVENING = 0xFF8B5CF6L
         const val COLOR_NIGHT = 0xFFEC4899L
 
-        private const val KEY_SLEEP_BUFFER_START_HOUR = "sleep_buffer_start_hour"
-        private const val KEY_SLEEP_BUFFER_END_HOUR = "sleep_buffer_end_hour"
+        private const val KEY_GOAL_IDS = "custom_goal_ids"
+        private const val PREFIX_GOAL_NAME = "goal_name_"
+        private const val PREFIX_GOAL_START = "goal_start_"
+        private const val PREFIX_GOAL_END = "goal_end_"
 
         @Volatile
         private var INSTANCE: SectorConfigStore? = null
@@ -94,31 +97,57 @@ class SectorConfigStore private constructor(context: Context) {
     }
 
     /**
-     * Updates boundaries for a sector.
+     * Returns the list of custom buffer goals (max 3).
+     * If uninitialized, creates default Wind-Down and Morning Calm goals.
      */
-    fun updateSector(sectorId: String, startHour: Int, endHour: Int) {
-        prefs.edit()
-            .putInt("${sectorId}_start", startHour)
-            .putInt("${sectorId}_end", endHour)
-            .apply()
+    fun getBufferGoals(): List<BufferGoal> {
+        val rawIds = prefs.getString(KEY_GOAL_IDS, null)
+        if (rawIds == null) {
+            // Initialize default goals
+            val defaults = listOf(
+                BufferGoal(id = "goal_wind_down", name = "Wind-Down Sleep Buffer", startHour = 23, endHour = 0),
+                BufferGoal(id = "goal_morning_calm", name = "Morning Calm Buffer", startHour = 6, endHour = 7)
+            )
+            saveAllGoals(defaults)
+            return defaults
+        }
+
+        val idList = rawIds.split(",").filter { it.isNotBlank() }
+        val result = mutableListOf<BufferGoal>()
+        for (id in idList) {
+            val name = prefs.getString("$PREFIX_GOAL_NAME$id", "Focus Buffer") ?: "Focus Buffer"
+            val start = prefs.getInt("$PREFIX_GOAL_START$id", 23)
+            val end = prefs.getInt("$PREFIX_GOAL_END$id", 0)
+            result.add(BufferGoal(id = id, name = name, startHour = start, endHour = end))
+        }
+        return result
     }
 
-    /**
-     * Returns the sleep buffer window (default 23:00 to 00:00, 1 hour before sleep).
-     */
-    fun getSleepBufferWindow(): Pair<Int, Int> {
-        val start = prefs.getInt(KEY_SLEEP_BUFFER_START_HOUR, 23)
-        val end = prefs.getInt(KEY_SLEEP_BUFFER_END_HOUR, 0)
-        return Pair(start, end)
+    fun saveBufferGoal(goal: BufferGoal) {
+        val goals = getBufferGoals().toMutableList()
+        val index = goals.indexOfFirst { it.id == goal.id }
+        if (index >= 0) {
+            goals[index] = goal
+        } else if (goals.size < 3) {
+            goals.add(goal)
+        }
+        saveAllGoals(goals)
     }
 
-    /**
-     * Configures the sleep buffer window.
-     */
-    fun setSleepBufferWindow(startHour: Int, endHour: Int) {
-        prefs.edit()
-            .putInt(KEY_SLEEP_BUFFER_START_HOUR, startHour)
-            .putInt(KEY_SLEEP_BUFFER_END_HOUR, endHour)
-            .apply()
+    fun deleteBufferGoal(goalId: String) {
+        val goals = getBufferGoals().filter { it.id != goalId }
+        saveAllGoals(goals)
+    }
+
+    private fun saveAllGoals(goals: List<BufferGoal>) {
+        val editor = prefs.edit()
+        val ids = goals.joinToString(",") { it.id }
+        editor.putString(KEY_GOAL_IDS, ids)
+        for (g in goals) {
+            editor.putString("$PREFIX_GOAL_NAME${g.id}", g.name)
+            editor.putInt("$PREFIX_GOAL_START${g.id}", g.startHour)
+            editor.putInt("$PREFIX_GOAL_END${g.id}", g.endHour)
+        }
+        editor.apply()
     }
 }

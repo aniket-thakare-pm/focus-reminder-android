@@ -1,9 +1,11 @@
 package com.example.focusreminder.ui.apps
 
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,6 +40,7 @@ import com.example.focusreminder.util.formatHoursMinutes
  */
 @Composable
 fun AppSelectionScreen(
+    onNavigateToAppAnalytics: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -303,6 +306,7 @@ fun AppSelectionScreen(
                             onConfigureLimits = {
                                 selectedAppForConfig = appInfo
                             },
+                            onNavigateToAppAnalytics = onNavigateToAppAnalytics,
                             onToggleTaskLock = {
                                 if (appInfo.isLocked) {
                                     repo.unlockApp(appInfo.packageName)
@@ -355,7 +359,8 @@ fun AppSelectionScreen(
                         },
                         onConfigureLimits = {
                             selectedAppForConfig = appInfo
-                        }
+                        },
+                        onNavigateToAppAnalytics = onNavigateToAppAnalytics
                     )
                 }
             }
@@ -378,19 +383,26 @@ fun AppSelectionScreen(
 /**
  * Row item for apps with active timer in the "Active Apps" section.
  * Shows configured limits, task lock button, and toggle switch.
+ * Single tap opens Analytics for this app; Long press opens limits configuration.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ActiveAppRowItem(
     app: InstalledAppInfo,
     onToggleRestricted: (Boolean) -> Unit,
     onConfigureLimits: () -> Unit,
+    onNavigateToAppAnalytics: (String) -> Unit = {},
     onToggleTaskLock: () -> Unit
 ) {
     NeuCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { onNavigateToAppAnalytics(app.packageName) },
+                onLongClick = onConfigureLimits
+            ),
         cornerRadius = 24.dp,
-        elevation = 6.dp,
-        onClick = onConfigureLimits
+        elevation = 6.dp
     ) {
         Column(
             modifier = Modifier
@@ -542,17 +554,23 @@ fun ActiveAppRowItem(
  * Row item for apps in the "All Apps" section.
  * Shows all downloaded apps with a toggle option just like requested.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AllAppRowItem(
     app: InstalledAppInfo,
     onToggleRestricted: (Boolean) -> Unit,
-    onConfigureLimits: () -> Unit
+    onConfigureLimits: () -> Unit,
+    onNavigateToAppAnalytics: (String) -> Unit = {}
 ) {
     NeuCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { onNavigateToAppAnalytics(app.packageName) },
+                onLongClick = onConfigureLimits
+            ),
         cornerRadius = 24.dp,
-        elevation = 4.dp,
-        onClick = if (app.isRestricted) onConfigureLimits else null
+        elevation = 4.dp
     ) {
         Row(
             modifier = Modifier

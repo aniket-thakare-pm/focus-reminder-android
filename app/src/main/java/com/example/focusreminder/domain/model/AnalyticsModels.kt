@@ -53,9 +53,19 @@ data class DayUsagePoint(
     val isToday: Boolean
 )
 
-data class SleepGoalStatus(
-    val goalLabel: String,
-    val targetBufferHours: String, // e.g. "23:00 - 00:00"
+data class BufferGoal(
+    val id: String,
+    val name: String,
+    val startHour: Int,
+    val endHour: Int
+)
+
+data class BufferGoalStatus(
+    val id: String,
+    val name: String,
+    val targetBufferHours: String, // e.g. "23:00 – 00:00"
+    val startHour: Int,
+    val endHour: Int,
     val isPassed: Boolean,
     val breachMinutes: Int,
     val breachTimeDesc: String,
@@ -75,12 +85,15 @@ data class AppUsageStat(
     val appName: String,
     val durationMinutes: Int,
     val sessionCount: Int,
-    val percentage: Float
+    val percentage: Float,
+    val isControlled: Boolean = false
 )
 
 data class AnalyticsSummary(
     val timeframe: AnalyticsTimeframe,
     val dateDisplay: String,
+    val scopeLabel: String,
+    val isControlledScope: Boolean,
     val totalUsageMinutes: Int,
     val dailyAverageMinutes: Int,
     val averageSessionDurationMs: Long,
@@ -90,9 +103,9 @@ data class AnalyticsSummary(
     val peakSector: SectorUsageStat?,
     val buckets: SessionBucketStats,
     val dailyPoints: List<DayUsagePoint>,
-    val sleepGoal: SleepGoalStatus,
+    val bufferGoals: List<BufferGoalStatus>,
     val categories: List<CategoryUsageStat>,
     val topApps: List<AppUsageStat>,
-    val availableApps: List<String> = emptyList(),
+    val availableApps: List<AppUsageStat> = emptyList(),
     val availableCategories: List<String> = emptyList()
 )

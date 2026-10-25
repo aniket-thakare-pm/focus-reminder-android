@@ -4,10 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -19,8 +17,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,6 +29,8 @@ import com.example.focusreminder.ui.components.*
 
 @Composable
 fun AnalyticsScreen(
+    initialPackage: String? = null,
+    onClearInitialPackage: () -> Unit = {},
     viewModel: AnalyticsViewModel = viewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -41,9 +39,20 @@ fun AnalyticsScreen(
     val dateOffset by viewModel.dateOffset.collectAsState()
     val selectedPackage by viewModel.selectedPackage.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val isControlledOnly by viewModel.isControlledOnly.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    var showSleepConfigDialog by remember { mutableStateOf(false) }
+    var showScopePickerModal by remember { mutableStateOf(false) }
+    var editingGoal by remember { mutableStateOf<BufferGoal?>(null) }
+    var isCreatingGoal by remember { mutableStateOf(false) }
+
+    // If navigated with initialPackage, focus it once
+    LaunchedEffect(initialPackage) {
+        if (!initialPackage.isNullOrBlank()) {
+            viewModel.focusPackage(initialPackage)
+            onClearInitialPackage()
+        }
+    }
 
     Column(
         modifier = modifier
@@ -52,55 +61,57 @@ fun AnalyticsScreen(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ================= HEADER & TIMEFRAME SELECTOR =================
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "Analytics",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Black,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Behavioral usage & sector insights",
-                    fontSize = 11.sp,
-                    color = TextMuted
-                )
-            }
-
-            // Neumorphic Timeframe Segmented Control
-            NeuCard(
-                cornerRadius = 14.dp,
-                elevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    TimeframePill(
-                        label = "Day",
-                        isSelected = timeframe == AnalyticsTimeframe.TODAY,
-                        onClick = { viewModel.setTimeframe(AnalyticsTimeframe.TODAY) }
-                    )
-                    TimeframePill(
-                        label = "Week",
-                        isSelected = timeframe == AnalyticsTimeframe.WEEK,
-                        onClick = { viewModel.setTimeframe(AnalyticsTimeframe.WEEK) }
-                    )
-                    TimeframePill(
-                        label = "Month",
-                        isSelected = timeframe == AnalyticsTimeframe.MONTH,
-                        onClick = { viewModel.setTimeframe(AnalyticsTimeframe.MONTH) }
-                    )
-                }
-            }
+        // ================= HEADER =================
+        Column {
+            Text(
+                text = "Analytics",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Black,
+                color = TextPrimary
+            )
+            Text(
+                text = "Comprehensive phone usage & sector insights",
+                fontSize = 11.sp,
+                color = TextMuted
+            )
         }
 
         Spacer(modifier = Modifier.height(14.dp))
+
+        // ================= FULL-WIDTH TIMEFRAME TABS (DAY | WEEK | MONTH) =================
+        NeuCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 16.dp,
+            elevation = 4.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TimeframePill(
+                    label = "Day",
+                    isSelected = timeframe == AnalyticsTimeframe.TODAY,
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.setTimeframe(AnalyticsTimeframe.TODAY) }
+                )
+                TimeframePill(
+                    label = "Week",
+                    isSelected = timeframe == AnalyticsTimeframe.WEEK,
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.setTimeframe(AnalyticsTimeframe.WEEK) }
+                )
+                TimeframePill(
+                    label = "Month",
+                    isSelected = timeframe == AnalyticsTimeframe.MONTH,
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.setTimeframe(AnalyticsTimeframe.MONTH) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         // ================= DATE STEPPER ROW =================
         Row(
@@ -144,47 +155,64 @@ fun AnalyticsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // ================= SCOPE FILTER CHIPS =================
-        val apps = summary?.availableApps ?: emptyList()
-        val categories = summary?.availableCategories ?: emptyList()
-
-        if (apps.isNotEmpty() || categories.isNotEmpty()) {
-            Row(
+        // ================= ACTIVE SCOPE BREADCRUMB PILL =================
+        val isScoped = selectedPackage != null || selectedCategory != null || isControlledOnly
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            NeuCard(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .weight(1f)
+                    .clickable { showScopePickerModal = true },
+                cornerRadius = 14.dp,
+                elevation = 3.dp
             ) {
-                FilterChipPill(
-                    label = "All Monitored",
-                    isSelected = selectedPackage == null && selectedCategory == null,
-                    onClick = {
-                        viewModel.filterByPackage(null)
-                        viewModel.filterByCategory(null)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Scope:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextMuted
+                        )
+                        Text(
+                            text = summary?.scopeLabel ?: "All Apps",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (isScoped) EmeraldDark else TextPrimary
+                        )
                     }
-                )
-
-                for (cat in categories) {
-                    FilterChipPill(
-                        label = cat,
-                        isSelected = selectedCategory == cat,
-                        onClick = { viewModel.filterByCategory(if (selectedCategory == cat) null else cat) }
-                    )
-                }
-
-                for (pkg in apps) {
-                    val label = pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-                    FilterChipPill(
-                        label = label,
-                        isSelected = selectedPackage == pkg,
-                        onClick = { viewModel.filterByPackage(if (selectedPackage == pkg) null else pkg) }
+                    Text(
+                        text = "▾",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
+
+            if (isScoped) {
+                Spacer(modifier = Modifier.width(8.dp))
+                NeuCircleButton(onClick = { viewModel.clearScope() }) {
+                    Text("✕", fontSize = 11.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            }
         }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // ================= SCROLLABLE ANALYTICS CARDS =================
         LazyColumn(
@@ -213,7 +241,7 @@ fun AnalyticsScreen(
                             ) {
                                 Column {
                                     Text(
-                                        text = if (timeframe == AnalyticsTimeframe.TODAY) "TOTAL USAGE TODAY" else "TOTAL TIME IN PERIOD",
+                                        text = if (timeframe == AnalyticsTimeframe.TODAY) "TOTAL SCREEN TIME TODAY" else "TOTAL TIME IN PERIOD",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Black,
                                         color = TextMuted,
@@ -318,88 +346,73 @@ fun AnalyticsScreen(
                     }
                 }
 
-                // 2. TIME-OF-DAY SECTORS CARD
-                item {
-                    NeuCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 24.dp,
-                        elevation = 6.dp
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp)
+                // 2. PRIMARY CHART (Day: Sectors | Week/Month: 7-Day Trend Bar Chart)
+                if (timeframe == AnalyticsTimeframe.TODAY) {
+                    item {
+                        NeuCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 24.dp,
+                            elevation = 6.dp
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "TIME OF DAY SECTORS",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = TextSecondary,
-                                    letterSpacing = 1.1.sp
-                                )
-
-                                s.peakSector?.let { peak ->
-                                    Text(
-                                        text = "Peak: ${peak.sector.name} (${(peak.percentage * 100).toInt()}%)",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(peak.sector.colorLong)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Segmented Sector Progress Bar
-                            SectorSegmentedBar(
-                                sectors = s.sectors,
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(14.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            // Sector Legend Grid (2x2)
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    .padding(18.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    SectorLegendItem(
-                                        stat = s.sectors.getOrNull(0),
-                                        modifier = Modifier.weight(1f)
+                                    Text(
+                                        text = "TIME OF DAY SECTORS",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = TextSecondary,
+                                        letterSpacing = 1.1.sp
                                     )
-                                    SectorLegendItem(
-                                        stat = s.sectors.getOrNull(1),
-                                        modifier = Modifier.weight(1f)
-                                    )
+
+                                    s.peakSector?.let { peak ->
+                                        Text(
+                                            text = "Peak: ${peak.sector.name} (${(peak.percentage * 100).toInt()}%)",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(peak.sector.colorLong)
+                                        )
+                                    }
                                 }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    SectorLegendItem(
-                                        stat = s.sectors.getOrNull(2),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    SectorLegendItem(
-                                        stat = s.sectors.getOrNull(3),
-                                        modifier = Modifier.weight(1f)
-                                    )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                SectorSegmentedBar(
+                                    sectors = s.sectors,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(14.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        SectorLegendItem(stat = s.sectors.getOrNull(0), modifier = Modifier.weight(1f))
+                                        SectorLegendItem(stat = s.sectors.getOrNull(1), modifier = Modifier.weight(1f))
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        SectorLegendItem(stat = s.sectors.getOrNull(2), modifier = Modifier.weight(1f))
+                                        SectorLegendItem(stat = s.sectors.getOrNull(3), modifier = Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
                     }
-                }
-
-                // 3. WEEKLY OR MONTHLY TREND CHART (When in Week or Month view)
-                if (timeframe != AnalyticsTimeframe.TODAY && s.dailyPoints.isNotEmpty()) {
+                } else if (s.dailyPoints.isNotEmpty()) {
                     item {
                         NeuCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -455,6 +468,72 @@ fun AnalyticsScreen(
                     }
                 }
 
+                // 3. APP & CATEGORY BREAKDOWN (MOVED UP HERE FOR IMMEDIATE CONTEXTUAL CLARITY)
+                if (s.topApps.isNotEmpty() || s.categories.isNotEmpty()) {
+                    item {
+                        NeuCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 24.dp,
+                            elevation = 6.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "APP & CATEGORY BREAKDOWN",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = TextSecondary,
+                                        letterSpacing = 1.1.sp
+                                    )
+                                    Text(
+                                        text = "Tap app to focus",
+                                        fontSize = 9.sp,
+                                        color = EmeraldDark
+                                    )
+                                }
+
+                                // Category Pills
+                                if (s.categories.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        for (cat in s.categories.take(4)) {
+                                            CategoryBadge(
+                                                cat = cat,
+                                                isSelected = selectedCategory == cat.category,
+                                                onClick = { viewModel.focusCategory(cat.category) },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // Top Apps List
+                                for (app in s.topApps.take(6)) {
+                                    AppRankingRow(
+                                        stat = app,
+                                        isFocused = selectedPackage == app.packageName,
+                                        onClick = { viewModel.focusPackage(app.packageName) }
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 4. SESSION DURATION DISTRIBUTION (BUCKETS)
                 item {
                     NeuCard(
@@ -475,7 +554,7 @@ fun AnalyticsScreen(
                                 letterSpacing = 1.1.sp
                             )
                             Text(
-                                text = "Impulsive checks vs intentional deep sessions",
+                                text = "Impulsive glances vs deep continuous sessions",
                                 fontSize = 10.sp,
                                 color = TextMuted
                             )
@@ -486,7 +565,7 @@ fun AnalyticsScreen(
 
                             SessionBucketRow(
                                 label = "< 1 min",
-                                sublabel = "Micro-checks / Glances",
+                                sublabel = "Micro-checks",
                                 count = s.buckets.microCount,
                                 total = total,
                                 color = Color(0xFF38BDF8)
@@ -504,7 +583,7 @@ fun AnalyticsScreen(
 
                             SessionBucketRow(
                                 label = "5 – 10 min",
-                                sublabel = "Standard Active Sessions",
+                                sublabel = "Active Sessions",
                                 count = s.buckets.standardCount,
                                 total = total,
                                 color = Color(0xFFFBBF24)
@@ -522,7 +601,7 @@ fun AnalyticsScreen(
                     }
                 }
 
-                // 5. SLEEP & WAKE BUFFER GOAL CARD
+                // 5. CUSTOM FOCUS BUFFER GOALS (UP TO 3 GOALS)
                 item {
                     NeuCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -539,126 +618,42 @@ fun AnalyticsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text(
-                                        text = "WIND-DOWN SLEEP GOAL",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = TextSecondary,
-                                        letterSpacing = 1.1.sp
-                                    )
-                                    Text(
-                                        text = "Window: ${s.sleepGoal.targetBufferHours}",
-                                        fontSize = 10.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = TextMuted
-                                    )
-                                }
-
-                                NeuInsetWell(
-                                    cornerRadius = 10.dp
-                                ) {
-                                    val passed = s.sleepGoal.isPassed
-                                    Text(
-                                        text = if (passed) "Goal Met" else "Breached",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = if (passed) EmeraldDark else Color(0xFFEF4444),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text(
-                                text = s.sleepGoal.breachTimeDesc,
-                                fontSize = 12.sp,
-                                color = if (s.sleepGoal.isPassed) EmeraldDark else Color(0xFFF87171),
-                                fontWeight = FontWeight.Medium
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Weekly Adherence bar
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
                                 Text(
-                                    text = "7-Day Adherence",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextMuted
-                                )
-                                Text(
-                                    text = "${s.sleepGoal.weeklyMetDays} / ${s.sleepGoal.weeklyTotalDays} Days (${(s.sleepGoal.weeklyComplianceRate * 100).toInt()}%)",
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = EmeraldDark
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            NeuInsetWell(
-                                cornerRadius = 6.dp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(s.sleepGoal.weeklyComplianceRate.coerceIn(0.04f, 1f))
-                                        .background(EmeraldPrimary, RoundedCornerShape(6.dp))
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Text(
-                                text = "Adjust Sleep Hours",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF38BDF8),
-                                modifier = Modifier
-                                    .clickable { showSleepConfigDialog = true }
-                                    .padding(vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-
-                // 6. TOP MONITORED APPS RANKING
-                if (s.topApps.isNotEmpty()) {
-                    item {
-                        NeuCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            cornerRadius = 24.dp,
-                            elevation = 6.dp
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(18.dp)
-                            ) {
-                                Text(
-                                    text = "APP USAGE RANKING",
+                                    text = "FOCUS BUFFER GOALS",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Black,
                                     color = TextSecondary,
                                     letterSpacing = 1.1.sp
                                 )
 
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                for (app in s.topApps) {
-                                    AppRankingRow(stat = app)
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                if (s.bufferGoals.size < 3) {
+                                    Text(
+                                        text = "+ Add Goal",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = EmeraldDark,
+                                        modifier = Modifier
+                                            .clickable { isCreatingGoal = true }
+                                            .padding(4.dp)
+                                    )
                                 }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            for (goal in s.bufferGoals) {
+                                BufferGoalRow(
+                                    goal = goal,
+                                    onClick = {
+                                        editingGoal = BufferGoal(
+                                            id = goal.id,
+                                            name = goal.name,
+                                            startHour = goal.startHour,
+                                            endHour = goal.endHour
+                                        )
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
                             }
                         }
                     }
@@ -678,40 +673,84 @@ fun AnalyticsScreen(
         }
     }
 
-    // Config Dialog for Sleep Buffer Window
-    if (showSleepConfigDialog) {
-        SleepBufferConfigDialog(
-            currentWindow = Pair(23, 0),
-            onDismiss = { showSleepConfigDialog = false },
-            onConfirm = { startH, endH ->
-                viewModel.updateSleepBuffer(startH, endH)
-                showSleepConfigDialog = false
+    // Modal: Scope Picker (All Apps, Controlled Apps, Categories, Specific Apps)
+    if (showScopePickerModal) {
+        ScopePickerModal(
+            summary = summary,
+            onSelectAllApps = {
+                viewModel.clearScope()
+                showScopePickerModal = false
+            },
+            onSelectControlledOnly = {
+                viewModel.setControlledOnly(true)
+                showScopePickerModal = false
+            },
+            onSelectCategory = { cat ->
+                viewModel.focusCategory(cat)
+                showScopePickerModal = false
+            },
+            onSelectPackage = { pkg ->
+                viewModel.focusPackage(pkg)
+                showScopePickerModal = false
+            },
+            onDismiss = { showScopePickerModal = false }
+        )
+    }
+
+    // Dialog: Edit / Add Buffer Goal
+    if (editingGoal != null) {
+        BufferGoalConfigDialog(
+            goal = editingGoal!!,
+            isNew = false,
+            onDismiss = { editingGoal = null },
+            onSave = { updated ->
+                viewModel.saveBufferGoal(updated)
+                editingGoal = null
+            },
+            onDelete = { id ->
+                viewModel.deleteBufferGoal(id)
+                editingGoal = null
             }
+        )
+    }
+
+    if (isCreatingGoal) {
+        val newId = "goal_${System.currentTimeMillis()}"
+        BufferGoalConfigDialog(
+            goal = BufferGoal(id = newId, name = "Deep Work Buffer", startHour = 14, endHour = 16),
+            isNew = true,
+            onDismiss = { isCreatingGoal = false },
+            onSave = { created ->
+                viewModel.saveBufferGoal(created)
+                isCreatingGoal = false
+            },
+            onDelete = { isCreatingGoal = false }
         )
     }
 }
 
-// ================= HELPER SUB-COMPONENTS =================
+// ================= SUB-COMPONENTS =================
 
 @Composable
 fun TimeframePill(
     label: String,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clickable(onClick = onClick)
             .background(
                 color = if (isSelected) EmeraldDark else Color.Transparent,
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(12.dp)
             )
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium,
             color = if (isSelected) Color.White else TextMuted
         )
@@ -719,32 +758,368 @@ fun TimeframePill(
 }
 
 @Composable
-fun FilterChipPill(
-    label: String,
+fun CategoryBadge(
+    cat: CategoryUsageStat,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     NeuCard(
-        cornerRadius = 14.dp,
-        elevation = if (isSelected) 6.dp else 2.dp,
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = modifier.clickable(onClick = onClick),
+        cornerRadius = 10.dp,
+        elevation = if (isSelected) 4.dp else 1.dp
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .background(
-                    if (isSelected) EmeraldDark.copy(alpha = 0.25f) else Color.Transparent,
-                    RoundedCornerShape(14.dp)
-                )
-                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .fillMaxWidth()
+                .background(if (isSelected) EmeraldDark.copy(alpha = 0.2f) else Color.Transparent)
+                .padding(vertical = 6.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isSelected) EmeraldPrimary else TextSecondary
+                text = cat.category,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) EmeraldPrimary else TextSecondary,
+                maxLines = 1
+            )
+            Text(
+                text = formatMinutes(cat.durationMinutes),
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
             )
         }
     }
+}
+
+@Composable
+fun AppRankingRow(
+    stat: AppUsageStat,
+    isFocused: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        NeuCircle(
+            modifier = Modifier.size(36.dp),
+            elevation = 3.dp
+        ) {
+            Text(
+                text = stat.appName.firstOrNull()?.uppercase() ?: "A",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+                color = if (isFocused) Color(0xFF38BDF8) else EmeraldPrimary
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stat.appName,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isFocused) Color(0xFF38BDF8) else TextPrimary
+                    )
+                    if (stat.isControlled) {
+                        Text(
+                            text = "CONTROLLED",
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.Black,
+                            color = EmeraldDark
+                        )
+                    }
+                }
+                Text(
+                    text = formatMinutes(stat.durationMinutes),
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = EmeraldDark
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "${stat.sessionCount} sessions",
+                    fontSize = 10.sp,
+                    color = TextMuted
+                )
+                Text(
+                    text = "${(stat.percentage * 100).toInt()}% share",
+                    fontSize = 10.sp,
+                    color = TextMuted
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BufferGoalRow(
+    goal: BufferGoalStatus,
+    onClick: () -> Unit
+) {
+    NeuInsetWell(
+        cornerRadius = 14.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = goal.name,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Window: ${goal.targetBufferHours}",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = TextMuted
+                    )
+                }
+
+                Text(
+                    text = if (goal.isPassed) "Goal Met" else "Breached",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = if (goal.isPassed) EmeraldDark else Color(0xFFEF4444)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = goal.breachTimeDesc,
+                    fontSize = 11.sp,
+                    color = if (goal.isPassed) EmeraldDark else Color(0xFFF87171)
+                )
+                Text(
+                    text = "${goal.weeklyMetDays}/7d (${(goal.weeklyComplianceRate * 100).toInt()}%)",
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = TextMuted
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ScopePickerModal(
+    summary: AnalyticsSummary?,
+    onSelectAllApps: () -> Unit,
+    onSelectControlledOnly: () -> Unit,
+    onSelectCategory: (String) -> Unit,
+    onSelectPackage: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Select Analytics Scope", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    Text("GLOBAL SCOPE", fontSize = 9.sp, fontWeight = FontWeight.Black, color = TextMuted)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ScopeListItem(title = "All Apps (Entire Phone)", subtitle = "All apps combined", onClick = onSelectAllApps)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ScopeListItem(title = "Controlled Apps Only", subtitle = "Only apps configured in limits", onClick = onSelectControlledOnly)
+                }
+
+                summary?.availableCategories?.takeIf { it.isNotEmpty() }?.let { cats ->
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("CATEGORIES", fontSize = 9.sp, fontWeight = FontWeight.Black, color = TextMuted)
+                    }
+                    for (cat in cats) {
+                        item {
+                            ScopeListItem(title = cat, subtitle = "All $cat applications", onClick = { onSelectCategory(cat) })
+                        }
+                    }
+                }
+
+                summary?.availableApps?.takeIf { it.isNotEmpty() }?.let { apps ->
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("INDIVIDUAL APPS", fontSize = 9.sp, fontWeight = FontWeight.Black, color = TextMuted)
+                    }
+                    for (app in apps) {
+                        item {
+                            ScopeListItem(
+                                title = app.appName,
+                                subtitle = if (app.isControlled) "Controlled" else "Uncontrolled",
+                                tagColor = if (app.isControlled) EmeraldDark else TextMuted,
+                                onClick = { onSelectPackage(app.packageName) }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = TextMuted) }
+        },
+        containerColor = NeuSurface
+    )
+}
+
+@Composable
+fun ScopeListItem(
+    title: String,
+    subtitle: String,
+    tagColor: Color? = null,
+    onClick: () -> Unit
+) {
+    NeuCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        cornerRadius = 10.dp,
+        elevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Text(subtitle, fontSize = 9.sp, color = tagColor ?: TextMuted)
+            }
+            Text("→", fontSize = 12.sp, color = TextSecondary)
+        }
+    }
+}
+
+@Composable
+fun BufferGoalConfigDialog(
+    goal: BufferGoal,
+    isNew: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (BufferGoal) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    var name by remember { mutableStateOf(goal.name) }
+    var startHour by remember { mutableStateOf(goal.startHour) }
+    var endHour by remember { mutableStateOf(goal.endHour) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (isNew) "Add Focus Buffer Goal" else "Edit Buffer Goal", color = TextPrimary, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Goal Name") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = EmeraldDark
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    "Set the time window when you commit to zero screen time:",
+                    fontSize = 11.sp,
+                    color = TextMuted
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Start Hour", fontSize = 10.sp, color = TextMuted)
+                        Text(String.format(java.util.Locale.US, "%02d:00", startHour), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = EmeraldDark)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Button(onClick = { startHour = (startHour + 23) % 24 }) { Text("-") }
+                            Button(onClick = { startHour = (startHour + 1) % 24 }) { Text("+") }
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("End Hour", fontSize = 10.sp, color = TextMuted)
+                        Text(String.format(java.util.Locale.US, "%02d:00", endHour), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = EmeraldDark)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Button(onClick = { endHour = (endHour + 23) % 24 }) { Text("-") }
+                            Button(onClick = { endHour = (endHour + 1) % 24 }) { Text("+") }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(goal.copy(name = name.ifBlank { "Focus Buffer" }, startHour = startHour, endHour = endHour))
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = EmeraldDark)
+            ) {
+                Text("Save", color = Color.White)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!isNew) {
+                    TextButton(onClick = { onDelete(goal.id) }) {
+                        Text("Delete", color = Color(0xFFEF4444))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = TextMuted)
+                }
+            }
+        },
+        containerColor = NeuSurface
+    )
 }
 
 @Composable
@@ -756,9 +1131,7 @@ fun SectorSegmentedBar(
         cornerRadius = 8.dp,
         modifier = modifier
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Row(modifier = Modifier.fillMaxSize()) {
             for (stat in sectors) {
                 if (stat.percentage > 0f) {
                     Box(
@@ -836,7 +1209,6 @@ fun DailyUsageBarChart(
         val barWidth = (w / (barCount * 2.0f)).coerceIn(8.dp.toPx(), 24.dp.toPx())
         val spacing = (w - (barWidth * barCount)) / (barCount + 1)
 
-        // Draw Benchmark Line (Dashed)
         val benchmarkY = h - (h * (benchmarkDailyAverage / maxMins))
         drawLine(
             color = Color(0xFF38BDF8).copy(alpha = 0.6f),
@@ -846,7 +1218,6 @@ fun DailyUsageBarChart(
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
         )
 
-        // Draw Bars
         points.forEachIndexed { index, point ->
             val barH = (h * (point.usageMinutes / maxMins)).coerceAtLeast(4.dp.toPx())
             val x = spacing + (index * (barWidth + spacing))
@@ -867,7 +1238,6 @@ fun DailyUsageBarChart(
         }
     }
 
-    // X-Axis Labels Row
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceAround
@@ -936,63 +1306,6 @@ fun SessionBucketRow(
 }
 
 @Composable
-fun AppRankingRow(stat: AppUsageStat) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        NeuCircle(
-            modifier = Modifier.size(36.dp),
-            elevation = 3.dp
-        ) {
-            Text(
-                text = stat.appName.firstOrNull()?.uppercase() ?: "A",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
-                color = EmeraldPrimary
-            )
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = stat.appName,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                Text(
-                    text = formatMinutes(stat.durationMinutes),
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = EmeraldDark
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${stat.sessionCount} sessions",
-                    fontSize = 10.sp,
-                    color = TextMuted
-                )
-                Text(
-                    text = "${(stat.percentage * 100).toInt()}% share",
-                    fontSize = 10.sp,
-                    color = TextMuted
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun NeuCircleButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
@@ -1012,66 +1325,6 @@ fun NeuCircleButton(
             content()
         }
     }
-}
-
-@Composable
-fun SleepBufferConfigDialog(
-    currentWindow: Pair<Int, Int>,
-    onDismiss: () -> Unit,
-    onConfirm: (Int, Int) -> Unit
-) {
-    var startHour by remember { mutableStateOf(currentWindow.first) }
-    var endHour by remember { mutableStateOf(currentWindow.second) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Configure Sleep Buffer", color = TextPrimary, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "Set the hours before sleep when you want to avoid screen time completely:",
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Start Hour", fontSize = 11.sp, color = TextMuted)
-                        Text(String.format(java.util.Locale.US, "%02d:00", startHour), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = EmeraldDark)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Button(onClick = { startHour = (startHour + 23) % 24 }) { Text("-") }
-                            Button(onClick = { startHour = (startHour + 1) % 24 }) { Text("+") }
-                        }
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("End Hour", fontSize = 11.sp, color = TextMuted)
-                        Text(String.format(java.util.Locale.US, "%02d:00", endHour), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = EmeraldDark)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Button(onClick = { endHour = (endHour + 23) % 24 }) { Text("-") }
-                            Button(onClick = { endHour = (endHour + 1) % 24 }) { Text("+") }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(startHour, endHour) },
-                colors = ButtonDefaults.buttonColors(containerColor = EmeraldDark)
-            ) {
-                Text("Save", color = Color.White)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextMuted)
-            }
-        },
-        containerColor = NeuSurface
-    )
 }
 
 private fun formatMinutes(minutes: Int): String {

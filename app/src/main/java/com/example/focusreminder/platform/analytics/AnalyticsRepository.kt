@@ -154,12 +154,14 @@ class AnalyticsRepository private constructor(private val context: Context) {
 
     /**
      * Builds a comprehensive AnalyticsSummary for the given timeframe, date offset, and filters.
+     * Accurately tracks ALL device applications, with optional filters for controlled apps, categories, or individual apps.
      */
     fun getAnalyticsSummary(
         timeframe: AnalyticsTimeframe,
         dateOffset: Int = 0,
         filterPackage: String? = null,
-        filterCategory: String? = null
+        filterCategory: String? = null,
+        isControlledOnly: Boolean = false
     ): AnalyticsSummary {
         // Sync before query to ensure all recent sessions are loaded
         syncFromSystemUsageEvents(lookbackDays = if (timeframe == AnalyticsTimeframe.MONTH) 35 else 14)
@@ -233,7 +235,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
             }
         }
 
-        // Query sessions from database
+        // Query all device sessions from database
         val rawSessions = dbHelper.querySessions(
             startTimeMs = startTimeMs,
             endTimeMs = endTimeMs,
@@ -241,12 +243,21 @@ class AnalyticsRepository private constructor(private val context: Context) {
             category = filterCategory
         )
 
-        // Filter: If user selected restricted apps only and no specific filter, only show monitored apps
-        val restricted = restrictionRepo.getRestrictedPackages()
-        val sessions = if (filterPackage.isNullOrBlank() && filterCategory.isNullOrBlank() && restricted.isNotEmpty()) {
-            rawSessions.filter { restricted.contains(it.packageName) }
-        } else {
-            rawSessions
+        val controlled = restrictionRepo.getRestrictedPackages()
+
+        // Filter according to selected scope
+        val sessions = when {
+            filterPackage != null -> rawSessions.filter { it.packageName == filterPackage }
+            filterCategory != null -> rawSessions.filter { it.category == filterCategory }
+            isControlledOnly -> rawSessions.filter { controlled.contains(it.packageName) }
+            else -> rawSessions // All device apps!
+        }
+
+        val scopeLabel = when {
+            filterPackage != null -> getAppName(filterPackage)
+            filterCategory != null -> "$filterCategory (Category)"
+            isControlledOnly -> "Controlled Apps (${controlled.size})"
+            else -> "All Apps"
         }
 
         val totalDurationMs = sessions.sumOf { it.durationMs }
@@ -264,17 +275,18 @@ class AnalyticsRepository private constructor(private val context: Context) {
         val vsAveragePercentage: Int
         when (timeframe) {
             AnalyticsTimeframe.TODAY -> {
-                // Compare with 7-day baseline
                 val pastWeekStart = startTimeMs - (7 * 24 * 60 * 60 * 1000L)
-                val pastWeekSessions = dbHelper.querySessions(
+                val pastWeekRaw = dbHelper.querySessions(
                     startTimeMs = pastWeekStart,
                     endTimeMs = startTimeMs - 1L,
                     packageName = filterPackage,
                     category = filterCategory
-                ).let { list ->
-                    if (filterPackage.isNullOrBlank() && filterCategory.isNullOrBlank() && restricted.isNotEmpty()) {
-                        list.filter { restricted.contains(it.packageName) }
-                    } else list
+                )
+                val pastWeekSessions = when {
+                    filterPackage != null -> pastWeekRaw.filter { it.packageName == filterPackage }
+                    filterCategory != null -> pastWeekRaw.filter { it.category == filterCategory }
+                    isControlledOnly -> pastWeekRaw.filter { controlled.contains(it.packageName) }
+                    else -> pastWeekRaw
                 }
                 val pastWeekTotalMin = (pastWeekSessions.sumOf { it.durationMs } / (60 * 1000L)).toInt()
                 dailyAverageMinutes = (pastWeekTotalMin / 7).coerceAtLeast(1)
@@ -396,58 +408,70 @@ class AnalyticsRepository private constructor(private val context: Context) {
             }
         }
 
-        // 4. Sleep & Wake Goal Status
-        val (sleepStartH, sleepEndH) = sectorStore.getSleepBufferWindow()
-        val sleepSessionsToday = sessions.filter { s ->
-            val cal = Calendar.getInstance().apply { timeInMillis = s.startTimeMs }
-            val h = cal.get(Calendar.HOUR_OF_DAY)
-            if (sleepStartH <= sleepEndH) h in sleepStartH until sleepEndH
-            else h >= sleepStartH || h < sleepEndH
-        }
-        val breachMinutes = (sleepSessionsToday.sumOf { it.durationMs } / (60 * 1000L)).toInt()
-        val isPassed = breachMinutes == 0
-        val breachTimeDesc = if (!isPassed && sleepSessionsToday.isNotEmpty()) {
-            val first = sleepSessionsToday.first()
-            val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-            "Breached at ${sdf.format(Date(first.startTimeMs))}"
-        } else {
-            "No screen time during buffer"
-        }
-
-        // Weekly compliance: Query past 7 days to evaluate sleep goal
+        // 4. Focus Buffer Goals Evaluation
+        val bufferGoals = sectorStore.getBufferGoals()
         val sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
         val past7DaysSessions = dbHelper.querySessions(sevenDaysAgo, System.currentTimeMillis()).let { list ->
-            if (restricted.isNotEmpty()) list.filter { restricted.contains(it.packageName) } else list
+            if (isControlledOnly || filterPackage != null || filterCategory != null) {
+                sessions
+            } else {
+                list
+            }
         }
         val daysGrouped = past7DaysSessions.groupBy {
             val c = Calendar.getInstance().apply { timeInMillis = it.startTimeMs }
             "${c.get(Calendar.YEAR)}_${c.get(Calendar.DAY_OF_YEAR)}"
         }
-        var metDays = 0
-        for (i in 0 until 7) {
-            val c = Calendar.getInstance().apply {
-                timeInMillis = sevenDaysAgo + (i * 24 * 60 * 60 * 1000L)
-            }
-            val key = "${c.get(Calendar.YEAR)}_${c.get(Calendar.DAY_OF_YEAR)}"
-            val dayList = daysGrouped[key] ?: emptyList()
-            val dayBreach = dayList.filter { s ->
-                val ch = Calendar.getInstance().apply { timeInMillis = s.startTimeMs }.get(Calendar.HOUR_OF_DAY)
-                if (sleepStartH <= sleepEndH) ch in sleepStartH until sleepEndH
-                else ch >= sleepStartH || ch < sleepEndH
-            }.sumOf { it.durationMs }
-            if (dayBreach == 0L) metDays++
-        }
 
-        val sleepGoal = SleepGoalStatus(
-            goalLabel = "Wind-Down Sleep Buffer",
-            targetBufferHours = String.format(Locale.US, "%02d:00 – %02d:00", sleepStartH, sleepEndH),
-            isPassed = isPassed,
-            breachMinutes = breachMinutes,
-            breachTimeDesc = breachTimeDesc,
-            weeklyComplianceRate = metDays.toFloat() / 7f,
-            weeklyMetDays = metDays,
-            weeklyTotalDays = 7
-        )
+        val goalStatuses = bufferGoals.map { goal ->
+            val startH = goal.startHour
+            val endH = goal.endHour
+
+            val goalSessionsToday = sessions.filter { s ->
+                val cal = Calendar.getInstance().apply { timeInMillis = s.startTimeMs }
+                val h = cal.get(Calendar.HOUR_OF_DAY)
+                if (startH <= endH) h in startH until endH
+                else h >= startH || h < endH
+            }
+            val breachMins = (goalSessionsToday.sumOf { it.durationMs } / (60 * 1000L)).toInt()
+            val passed = breachMins == 0
+            val breachDesc = if (!passed && goalSessionsToday.isNotEmpty()) {
+                val first = goalSessionsToday.first()
+                val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+                "Breached at ${sdf.format(Date(first.startTimeMs))} (${breachMins}m)"
+            } else {
+                "No screen time during buffer"
+            }
+
+            var metDays = 0
+            for (i in 0 until 7) {
+                val c = Calendar.getInstance().apply {
+                    timeInMillis = sevenDaysAgo + (i * 24 * 60 * 60 * 1000L)
+                }
+                val key = "${c.get(Calendar.YEAR)}_${c.get(Calendar.DAY_OF_YEAR)}"
+                val dayList = daysGrouped[key] ?: emptyList()
+                val dayBreach = dayList.filter { s ->
+                    val ch = Calendar.getInstance().apply { timeInMillis = s.startTimeMs }.get(Calendar.HOUR_OF_DAY)
+                    if (startH <= endH) ch in startH until endH
+                    else ch >= startH || ch < endH
+                }.sumOf { it.durationMs }
+                if (dayBreach == 0L) metDays++
+            }
+
+            BufferGoalStatus(
+                id = goal.id,
+                name = goal.name,
+                targetBufferHours = String.format(Locale.US, "%02d:00 – %02d:00", startH, endH),
+                startHour = startH,
+                endHour = endH,
+                isPassed = passed,
+                breachMinutes = breachMins,
+                breachTimeDesc = breachDesc,
+                weeklyComplianceRate = metDays.toFloat() / 7f,
+                weeklyMetDays = metDays,
+                weeklyTotalDays = 7
+            )
+        }
 
         // 5. Category Breakdown
         val catMap = sessions.groupBy { it.category }
@@ -458,7 +482,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
             CategoryUsageStat(category = cat, durationMinutes = mins, percentage = pct)
         }.sortedByDescending { it.durationMinutes }
 
-        // 6. Top Apps
+        // 6. Top Apps Ranking
         val appMap = sessions.groupBy { it.packageName }
         val appStats = appMap.map { (pkg, list) ->
             val dMs = list.sumOf { it.durationMs }
@@ -469,17 +493,33 @@ class AnalyticsRepository private constructor(private val context: Context) {
                 appName = list.firstOrNull()?.appName ?: getAppName(pkg),
                 durationMinutes = mins,
                 sessionCount = list.size,
-                percentage = pct
+                percentage = pct,
+                isControlled = controlled.contains(pkg)
             )
         }.sortedByDescending { it.durationMinutes }
 
-        // Available lists for filtering
-        val allRecordedApps = rawSessions.map { it.packageName }.distinct()
-        val allRecordedCategories = rawSessions.map { it.category }.distinct()
+        // Available lists for filtering (with controlled status)
+        val allDistinctPackages = rawSessions.map { it.packageName }.distinct()
+        val availableAppStats = allDistinctPackages.map { pkg ->
+            val isCtrl = controlled.contains(pkg)
+            val name = getAppName(pkg)
+            AppUsageStat(
+                packageName = pkg,
+                appName = name,
+                durationMinutes = 0,
+                sessionCount = 0,
+                percentage = 0f,
+                isControlled = isCtrl
+            )
+        }.sortedWith(compareByDescending<AppUsageStat> { it.isControlled }.thenBy { it.appName })
+
+        val allRecordedCategories = rawSessions.map { it.category }.distinct().sorted()
 
         return AnalyticsSummary(
             timeframe = timeframe,
             dateDisplay = dateDisplay,
+            scopeLabel = scopeLabel,
+            isControlledScope = isControlledOnly,
             totalUsageMinutes = totalUsageMinutes,
             dailyAverageMinutes = dailyAverageMinutes,
             averageSessionDurationMs = averageSessionDurationMs,
@@ -489,10 +529,10 @@ class AnalyticsRepository private constructor(private val context: Context) {
             peakSector = peakSector,
             buckets = buckets,
             dailyPoints = dailyPoints,
-            sleepGoal = sleepGoal,
+            bufferGoals = goalStatuses,
             categories = categoryStats,
             topApps = appStats,
-            availableApps = allRecordedApps,
+            availableApps = availableAppStats,
             availableCategories = allRecordedCategories
         )
     }

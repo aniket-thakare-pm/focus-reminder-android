@@ -39,6 +39,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(AppNavigationTab.TIMER) }
+    var analyticsFocusedPackage by remember { mutableStateOf<String?>(null) }
 
     BioluminescentBackground(showGrid = false) {
         Box(
@@ -57,6 +58,10 @@ fun MainScreen(
                         onNavigateToApps = { currentTab = AppNavigationTab.APPS },
                         onNavigateToAlerts = { currentTab = AppNavigationTab.ALERTS },
                         onNavigateToAnalytics = { currentTab = AppNavigationTab.ANALYTICS },
+                        onNavigateToAppAnalytics = { pkg ->
+                            analyticsFocusedPackage = pkg
+                            currentTab = AppNavigationTab.ANALYTICS
+                        },
                         onTestBlocker = {
                             val intent = BlockerActivity.createIntent(
                                 context = context,
@@ -79,8 +84,16 @@ fun MainScreen(
                             Toast.makeText(context, "Sticky P0 Alert scheduled in 5 seconds! Lock your phone to test.", Toast.LENGTH_LONG).show()
                         }
                     )
-                    AppNavigationTab.ANALYTICS -> AnalyticsScreen()
-                    AppNavigationTab.APPS -> AppSelectionScreen()
+                    AppNavigationTab.ANALYTICS -> AnalyticsScreen(
+                        initialPackage = analyticsFocusedPackage,
+                        onClearInitialPackage = { analyticsFocusedPackage = null }
+                    )
+                    AppNavigationTab.APPS -> AppSelectionScreen(
+                        onNavigateToAppAnalytics = { pkg ->
+                            analyticsFocusedPackage = pkg
+                            currentTab = AppNavigationTab.ANALYTICS
+                        }
+                    )
                     AppNavigationTab.ALERTS -> RemindersScreen(
                         onPreviewSticky = {
                             val intent = StickyReminderActivity.createIntent(

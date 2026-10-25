@@ -49,6 +49,7 @@ fun DashboardScreen(
     onNavigateToApps: () -> Unit,
     onNavigateToAlerts: () -> Unit = {},
     onNavigateToAnalytics: () -> Unit = {},
+    onNavigateToAppAnalytics: (String) -> Unit = {},
     onTestBlocker: () -> Unit,
     onTestStickyReminder: () -> Unit,
     modifier: Modifier = Modifier
@@ -515,7 +516,8 @@ fun DashboardScreen(
                     NeuCard(
                         modifier = Modifier.fillMaxWidth(),
                         cornerRadius = 24.dp,
-                        elevation = 6.dp
+                        elevation = 6.dp,
+                        onClick = { onNavigateToAppAnalytics(pkg) }
                     ) {
                         Column(
                             modifier = Modifier

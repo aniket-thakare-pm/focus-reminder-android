@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.focusreminder.domain.model.AnalyticsSummary
 import com.example.focusreminder.domain.model.AnalyticsTimeframe
+import com.example.focusreminder.domain.model.BufferGoal
 import com.example.focusreminder.platform.analytics.AnalyticsRepository
 import com.example.focusreminder.platform.analytics.SectorConfigStore
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     private val _selectedCategory = MutableStateFlow<String?>(null)
     val selectedCategory: StateFlow<String?> = _selectedCategory.asStateFlow()
 
+    private val _isControlledOnly = MutableStateFlow(false)
+    val isControlledOnly: StateFlow<Boolean> = _isControlledOnly.asStateFlow()
+
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -57,20 +61,41 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         loadData()
     }
 
-    fun filterByPackage(pkg: String?) {
+    fun focusPackage(pkg: String) {
         _selectedPackage.value = pkg
-        if (pkg != null) _selectedCategory.value = null
+        _selectedCategory.value = null
+        _isControlledOnly.value = false
         loadData()
     }
 
-    fun filterByCategory(cat: String?) {
+    fun focusCategory(cat: String) {
         _selectedCategory.value = cat
-        if (cat != null) _selectedPackage.value = null
+        _selectedPackage.value = null
+        _isControlledOnly.value = false
         loadData()
     }
 
-    fun updateSleepBuffer(startHour: Int, endHour: Int) {
-        sectorStore.setSleepBufferWindow(startHour, endHour)
+    fun setControlledOnly(controlled: Boolean) {
+        _isControlledOnly.value = controlled
+        _selectedPackage.value = null
+        _selectedCategory.value = null
+        loadData()
+    }
+
+    fun clearScope() {
+        _selectedPackage.value = null
+        _selectedCategory.value = null
+        _isControlledOnly.value = false
+        loadData()
+    }
+
+    fun saveBufferGoal(goal: BufferGoal) {
+        sectorStore.saveBufferGoal(goal)
+        loadData()
+    }
+
+    fun deleteBufferGoal(goalId: String) {
+        sectorStore.deleteBufferGoal(goalId)
         loadData()
     }
 
@@ -82,7 +107,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     timeframe = _timeframe.value,
                     dateOffset = _dateOffset.value,
                     filterPackage = _selectedPackage.value,
-                    filterCategory = _selectedCategory.value
+                    filterCategory = _selectedCategory.value,
+                    isControlledOnly = _isControlledOnly.value
                 )
             }
             _summary.value = data

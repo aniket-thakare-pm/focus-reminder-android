@@ -1,6 +1,17 @@
 # Focus & Reminder — Version Changelog
 
-### v1.7.0 (Current) — 2026-10-25
+### v1.7.1 (Current) — 2026-10-25
+* **Type:** Patch / Full-Width Timeframe Tabs, Cross-Screen App Pivots & Custom Multi-Buffer Goals
+* **Summary:**
+  - **Full-Width Timeframe Tabs:** Relocated `[ Day | Week | Month ]` segmented control directly below header description across full screen width (`weight(1f)`), completely fixing text overflow and height distortion.
+  - **All Apps Tracking vs Controlled Apps:** Analytics tracks all device applications across categories while Dashboard and App Selection screens stay cleanly focused on controlled apps.
+  - **Cross-Screen Tap-to-Analytics:** Tapping an app item/icon on Dashboard or App Selection immediately navigates to Analytics focused on that app.
+  - **Long-Press to Configure Limits:** App Selection row now opens limit configuration on long press, reserving single tap for analytics.
+  - **Active Scope Breadcrumb Pill (`[ AppName ✕ ]`):** Single tactile anchor at top of Analytics showing active scope, with one-tap reset back to All Apps.
+  - **Repositioned App Breakdown:** Moved App & Category breakdown directly beneath the primary chart for immediate contextual clarity. Tapping any item pivots Analytics to it.
+  - **Custom Focus Buffer Goals Engine:** Up to 3 customizable buffer goals with reliable local storage persistence, replacing the hardcoded wind-down card.
+
+### v1.7.0 — 2026-10-25
 * **Type:** Feature Release / In-App Analytics & Persistent Session Logging Engine
 * **Summary:**
   - **In-App Analytics Suite:** Complete behavioral analytics interface accessible via a dedicated bottom navigation tab and by tapping the central sunken circular dial on the dashboard.
