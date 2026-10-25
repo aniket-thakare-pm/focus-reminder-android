@@ -342,22 +342,14 @@ class UsageMonitorService : ComponentActivityService() {
 
         val builder = NotificationCompat.Builder(this, CHRONOMETER_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_timer)
-            .setContentTitle("$appName Focus Session: $timeStr")
-            .setContentText("⏱ $timeStr remaining • Wrap up before cooldown")
-            .setSubText("Active Session")
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)
-            .setWhen(endTimeMs)
-            .setShowWhen(true)
+            .setContentTitle(appName)
+            .setContentText("$timeStr remaining")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setColor(android.graphics.Color.parseColor("#4F46E5")) // Vibrant Indigo/Purple
             .setContentIntent(contentPendingIntent)
-
-        builder.extras.putBoolean("android.requestPromotedOngoing", true)
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(CHRONOMETER_NOTIFICATION_ID, builder.build())

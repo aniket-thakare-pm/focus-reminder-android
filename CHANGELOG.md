@@ -1,6 +1,14 @@
 # Focus & Reminder — Version Changelog
 
-### v1.5.3 (Current) — 2026-10-25
+### v1.5.4 (Current) — 2026-10-25
+* **Type:** Patch / Notification De-Clutter & Minimalist Design
+* **Summary:**
+  - **De-Cluttered to 2 Lines:** Removed all triple redundancy (`setSubText`, duplicate chronometer header, and "Wrap up before cooldown" text).
+  - **Strict Minimalist Layout:** Line 1 is the App Name (`Instagram`), Line 2 is the exact countdown (`04:20 remaining`).
+  - **Zero Desync:** Eliminated the 2-second timestamp drift between system chronometer and dynamic text by driving a single source of truth.
+
+### v1.5.3 — 2026-10-25
+* **Commit:** `ca4a487`
 * **Type:** Patch / Continuous Sticky Timer Notification
 * **Summary:**
   - **Dual-Rendering Continuous Timer:** In addition to the native Android chronometer in the header, the exact remaining digital countdown (`09:48`, `09:47`...) is dynamically rendered directly in the notification title and content body so it is universally visible across all OEM skins (OxygenOS, ColorOS, OneUI).
