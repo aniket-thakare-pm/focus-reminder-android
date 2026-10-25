@@ -181,6 +181,60 @@ fun NavJournalIcon(
     }
 }
 
+@Composable
+fun NavAnalyticsIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 1.8.dp.toPx()
+        val bottomY = size.height * 0.85f
+        val startX = size.width * 0.14f
+        val endX = size.width * 0.86f
+
+        // Baseline
+        drawLine(
+            color = color,
+            start = Offset(startX, bottomY),
+            end = Offset(endX, bottomY),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+
+        val barWidth = 3.2.dp.toPx()
+
+        // Bar 1 (Short)
+        val x1 = size.width * 0.28f
+        drawLine(
+            color = color,
+            start = Offset(x1, bottomY),
+            end = Offset(x1, size.height * 0.54f),
+            strokeWidth = barWidth,
+            cap = StrokeCap.Round
+        )
+
+        // Bar 2 (Tall)
+        val x2 = size.width * 0.50f
+        drawLine(
+            color = color,
+            start = Offset(x2, bottomY),
+            end = Offset(x2, size.height * 0.20f),
+            strokeWidth = barWidth,
+            cap = StrokeCap.Round
+        )
+
+        // Bar 3 (Medium)
+        val x3 = size.width * 0.72f
+        drawLine(
+            color = color,
+            start = Offset(x3, bottomY),
+            end = Offset(x3, size.height * 0.36f),
+            strokeWidth = barWidth,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
 /**
  * Minimalist Vector Lock Icon for Task Locks & Security (Zero Emojis).
  */

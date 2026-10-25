@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 fun DashboardScreen(
     onNavigateToApps: () -> Unit,
     onNavigateToAlerts: () -> Unit = {},
+    onNavigateToAnalytics: () -> Unit = {},
     onTestBlocker: () -> Unit,
     onTestStickyReminder: () -> Unit,
     modifier: Modifier = Modifier
@@ -311,13 +312,17 @@ fun DashboardScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // The Sunken Inset Circular Well
+                // The Sunken Inset Circular Well (Clickable to open Analytics)
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(200.dp)
+                    modifier = Modifier
+                        .size(200.dp)
+                        .clickable { onNavigateToAnalytics() }
                 ) {
                     NeuCircle(
-                        modifier = Modifier.size(200.dp),
+                        modifier = Modifier
+                            .size(200.dp)
+                            .clickable { onNavigateToAnalytics() },
                         isInset = true
                     ) {
                         val trackColor = NeuSunkenTrack
@@ -341,7 +346,9 @@ fun DashboardScreen(
 
                         // Center Extruded Tactile Puck (Floating inside the well)
                         NeuCircle(
-                            modifier = Modifier.size(130.dp),
+                            modifier = Modifier
+                                .size(130.dp)
+                                .clickable { onNavigateToAnalytics() },
                             elevation = 6.dp,
                             isInset = false
                         ) {
@@ -368,6 +375,14 @@ fun DashboardScreen(
                                     fontSize = 9.sp,
                                     color = TextMuted,
                                     fontFamily = FontFamily.Monospace
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "TAP FOR STATS",
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF38BDF8).copy(alpha = 0.85f),
+                                    letterSpacing = 1.sp
                                 )
                             }
                         }

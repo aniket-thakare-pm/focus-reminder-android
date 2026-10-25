@@ -13,6 +13,7 @@ import com.example.focusreminder.domain.engine.RollingWindowUsageCalculator
 import com.example.focusreminder.platform.AppRestrictionRepository
 import com.example.focusreminder.platform.ForegroundAppDetector
 import com.example.focusreminder.platform.UsagePermissionHelper
+import com.example.focusreminder.platform.analytics.AnalyticsRepository
 import com.example.focusreminder.ui.blocker.BlockerActivity
 import com.example.focusreminder.ui.session.SessionContractActivity
 import kotlinx.coroutines.*
@@ -96,6 +97,7 @@ class UsageMonitorService : ComponentActivityService() {
 
     private lateinit var detector: ForegroundAppDetector
     private lateinit var repo: AppRestrictionRepository
+    private lateinit var analyticsRepo: AnalyticsRepository
 
     private var lastBlockedPackage: String? = null
     private var lastBlockedTimeMs: Long = 0L
@@ -104,6 +106,7 @@ class UsageMonitorService : ComponentActivityService() {
     private var activeSessionPackage: String? = null
     private var activeSessionAppName: String? = null
     private var activeSessionEndTimeMs: Long = 0L
+    private var activeSessionStartMs: Long = 0L
     private var activeCooldownMinutes: Int = 30
     private var remainingSessionMs: Long = 0L
     private var isSessionPaused: Boolean = false
@@ -118,6 +121,7 @@ class UsageMonitorService : ComponentActivityService() {
         super.onCreate()
         detector = ForegroundAppDetector(this)
         repo = AppRestrictionRepository.getInstance(this)
+        analyticsRepo = AnalyticsRepository.getInstance(this)
         createNotificationChannels()
     }
 
@@ -137,6 +141,7 @@ class UsageMonitorService : ComponentActivityService() {
                     val now = System.currentTimeMillis()
                     activeSessionPackage = pkg
                     activeSessionAppName = name
+                    activeSessionStartMs = now
                     remainingSessionMs = sessionMins * 60 * 1000L
                     activeSessionEndTimeMs = now + remainingSessionMs
                     activeCooldownMinutes = cooldownMins
@@ -208,6 +213,12 @@ class UsageMonitorService : ComponentActivityService() {
                             val appLabel = activeSessionAppName ?: activePkg.substringAfterLast(".")
                             val cooldownMin = activeCooldownMinutes
 
+                            // Record completed session in analytics database
+                            val duration = now - activeSessionStartMs
+                            if (duration >= 1000L) {
+                                analyticsRepo.recordSession(activePkg, appLabel, activeSessionStartMs, now, duration)
+                            }
+
                             // Enforce cooldown lock
                             repo.lockApp(activePkg, appLabel, durationMinutes = cooldownMin)
 
@@ -234,6 +245,11 @@ class UsageMonitorService : ComponentActivityService() {
                             // Already paused: check 5-minute session continuity grace period
                             if ((now - sessionPausedAtMs) > (5 * 60 * 1000L)) {
                                 // User stayed away for > 5 mins: cleanly expire the session
+                                val appLabel = activeSessionAppName ?: activePkg.substringAfterLast(".")
+                                val duration = sessionPausedAtMs - activeSessionStartMs
+                                if (duration >= 1000L) {
+                                    analyticsRepo.recordSession(activePkg, appLabel, activeSessionStartMs, sessionPausedAtMs, duration)
+                                }
                                 activeSessionPackage = null
                                 remainingSessionMs = 0L
                                 isSessionPaused = false

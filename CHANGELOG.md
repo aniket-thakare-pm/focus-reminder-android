@@ -1,6 +1,16 @@
 # Focus & Reminder — Version Changelog
 
-### v1.6.1 (Current) — 2026-10-25
+### v1.7.0 (Current) — 2026-10-25
+* **Type:** Feature Release / In-App Analytics & Persistent Session Logging Engine
+* **Summary:**
+  - **In-App Analytics Suite:** Complete behavioral analytics interface accessible via a dedicated bottom navigation tab and by tapping the central sunken circular dial on the dashboard.
+  - **Local Session Logging Database (`SessionDatabaseHelper`):** High-speed SQLite database engine logging exact session start, session end, elapsed duration, app category, and time-of-day sector.
+  - **Time-of-Day Sectors:** Divides usage across 4 customizable biological and work sectors (Morning, Afternoon, Evening, Night) with color-coded segmented progress bars, peak vulnerability callout, and sector legends.
+  - **Session Duration Distribution (Buckets):** Categorizes sessions into Micro-checks (<1m), Short visits (1–5m), Standard active browsing (5–10m), and Capped/Limit reached (10m+) with percentages and session counts.
+  - **Sleep & Wake Buffer Goal Tracker:** User-configurable wind-down sleep buffer (default 23:00 to 00:00) tracking buffer breaches, exact breach times, and 7-day adherence rates.
+  - **Daily, Weekly, and Monthly Time Horizons:** Timeframe selector with date steppers, multi-level filters (all monitored, by category, or by specific app), and a 7-day bar chart with a dashed Daily Average benchmark line.
+
+### v1.6.1 — 2026-10-25
 * **Type:** Patch / Usage Over-Counting Fix & High-Water Mark Cache Reset
 * **Summary:**
   - **Eradicated `queryAndAggregateUsageStats`:** Permanently removed calls to `manager.queryAndAggregateUsageStats()`, which Android OS implements by expanding time intervals to whole daily disk bucket boundaries, inadvertently aggregating yesterday's usage into today's tally (e.g. 2.5h + 2.5h = 5h).

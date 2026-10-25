@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
 import com.example.focusreminder.platform.ReminderScheduler
 import com.example.focusreminder.theme.*
+import com.example.focusreminder.ui.analytics.AnalyticsScreen
 import com.example.focusreminder.ui.apps.AppSelectionScreen
 import com.example.focusreminder.ui.blocker.BlockerActivity
 import com.example.focusreminder.ui.components.*
@@ -25,6 +26,7 @@ import com.example.focusreminder.ui.reminders.RemindersScreen
 
 enum class AppNavigationTab {
     TIMER,
+    ANALYTICS,
     APPS,
     ALERTS,
     JOURNAL
@@ -54,6 +56,7 @@ fun MainScreen(
                     AppNavigationTab.TIMER -> DashboardScreen(
                         onNavigateToApps = { currentTab = AppNavigationTab.APPS },
                         onNavigateToAlerts = { currentTab = AppNavigationTab.ALERTS },
+                        onNavigateToAnalytics = { currentTab = AppNavigationTab.ANALYTICS },
                         onTestBlocker = {
                             val intent = BlockerActivity.createIntent(
                                 context = context,
@@ -76,6 +79,7 @@ fun MainScreen(
                             Toast.makeText(context, "Sticky P0 Alert scheduled in 5 seconds! Lock your phone to test.", Toast.LENGTH_LONG).show()
                         }
                     )
+                    AppNavigationTab.ANALYTICS -> AnalyticsScreen()
                     AppNavigationTab.APPS -> AppSelectionScreen()
                     AppNavigationTab.ALERTS -> RemindersScreen(
                         onPreviewSticky = {
@@ -109,7 +113,7 @@ fun MainScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -121,7 +125,15 @@ fun MainScreen(
                             NavTimerIcon(color = color)
                         }
 
-                        // Tab 2: Apps
+                        // Tab 2: Analytics
+                        NeuIconNavButton(
+                            isSelected = currentTab == AppNavigationTab.ANALYTICS,
+                            onClick = { currentTab = AppNavigationTab.ANALYTICS }
+                        ) { color ->
+                            NavAnalyticsIcon(color = color)
+                        }
+
+                        // Tab 3: Apps
                         NeuIconNavButton(
                             isSelected = currentTab == AppNavigationTab.APPS,
                             onClick = { currentTab = AppNavigationTab.APPS }
@@ -129,7 +141,7 @@ fun MainScreen(
                             NavAppsIcon(color = color)
                         }
 
-                        // Tab 3: Alerts
+                        // Tab 4: Alerts
                         NeuIconNavButton(
                             isSelected = currentTab == AppNavigationTab.ALERTS,
                             onClick = { currentTab = AppNavigationTab.ALERTS }
@@ -137,7 +149,7 @@ fun MainScreen(
                             NavAlertsIcon(color = color)
                         }
 
-                        // Tab 4: Journal
+                        // Tab 5: Journal
                         NeuIconNavButton(
                             isSelected = currentTab == AppNavigationTab.JOURNAL,
                             onClick = { currentTab = AppNavigationTab.JOURNAL }
