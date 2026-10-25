@@ -1,6 +1,14 @@
 # Focus & Reminder — Version Changelog
 
-### v1.5.0 (Current) — 2026-10-25
+### v1.5.1 (Current) — 2026-10-25
+* **Type:** Patch / OEM Status Bar Capsule Enhancement
+* **Summary:**
+  - **Live Floating Status Bar Capsule (Overlay):** Added native `FloatingTimerOverlay` rendering a live ticking purple countdown pill (`⏱ MM:SS`) directly in the status bar area next to the clock. Ticks every second, is smoothly draggable, and automatically dismisses when the session ends or app closes.
+  - **Status Bar Notification Fix:** Upgraded chronometer channel from `IMPORTANCE_LOW` (which hid the notification from the status bar on OEM ROMs) to `IMPORTANCE_HIGH`, added `CATEGORY_STOPWATCH`, `setShowBadge(true)`, and `EXTRA_REQUEST_PROMOTED_ONGOING`.
+  - **Dedicated Vector Asset:** Added `ic_stat_timer.xml` crisp stopwatch icon for status bar notification and floating capsule.
+
+### v1.5.0 — 2026-10-25
+* **Commit:** `095cb49`
 * **Type:** Major Feature Release
 * **Summary:**
   - **Session Entry Contract:** Full-screen pop-up upon opening restricted apps with tactile Neumorphic "Slide to Understand" slider and haptic feedback.

@@ -19,6 +19,7 @@
 | ADR-007 | Full-Screen Reminder Fallback Presentation | Accepted | UI / Notifications |
 | ADR-008 | Daily Total App Limit (Cumulative Budget) | Accepted | Core Usage Engine |
 | ADR-009 | Session Contract, Live Chronometer & Cooldown | Accepted | UX / Focus Enforcement |
+| ADR-010 | OEM Status Bar Floating Capsule & Chronometer Fix | Accepted | UX / Status Bar Overlay |
 
 ---
 
@@ -119,3 +120,14 @@
   5. **Exact Lock & Grace Period:** At 00:00, the app locks immediately for the configured cooldown period. A 5-minute grace period applies to temporary app-switches or screen locks.
 - **Rationale:** Introduces intentional entry friction, continuous ambient time awareness without active polling battery drain, and guaranteed enforcement.
 - **Consequences:** Created `SessionContractActivity`, updated `UsageMonitorService` with active session tracking and notification channels, and updated `AppRestrictionRepository` to persist `cooldownMinutes`.
+
+---
+
+## ADR-010: OEM Status Bar Floating Capsule & Chronometer Fix
+
+- **Context:** OEM ROMs (OxygenOS, ColorOS, HyperOS) have proprietary status bar capsules (Fluid Cloud / Live Alerts) that hardcode system apps (like the built-in Clock) and block 3rd-party apps from injecting into the status bar clock slot. Furthermore, `IMPORTANCE_LOW` notifications are completely hidden from the status bar.
+- **Decision:**
+  1. **Status Bar Notification Fix:** Upgrade chronometer notification channel to `IMPORTANCE_HIGH`, assign `CATEGORY_STOPWATCH`, add `ic_stat_timer.xml` vector icon, and set `EXTRA_REQUEST_PROMOTED_ONGOING` so the notification surfaces in the status bar and drawer.
+  2. **Floating Status Bar Capsule Overlay (`FloatingTimerOverlay`):** Use `SYSTEM_ALERT_WINDOW` to display a native, live-ticking purple/indigo capsule pill (`⏱ MM:SS`) docked directly in the status bar area next to the clock. Ticks every second, is smoothly draggable, and automatically dismisses when the session ends or app closes.
+- **Rationale:** Ensures 100% parity with OEM system timer pills (like OxygenOS Fluid Cloud) across all devices, even when the manufacturer blocks 3rd-party status bar APIs.
+- **Consequences:** Created `FloatingTimerOverlay`, updated `UsageMonitorService` to show/hide the overlay during active sessions, and bumped release to `v1.5.1`.

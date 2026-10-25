@@ -7,12 +7,14 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.focusreminder.MainActivity
+import com.example.focusreminder.R
 import com.example.focusreminder.domain.engine.CooldownManager
 import com.example.focusreminder.domain.engine.RollingWindowUsageCalculator
 import com.example.focusreminder.platform.AppRestrictionRepository
 import com.example.focusreminder.platform.ForegroundAppDetector
 import com.example.focusreminder.platform.UsagePermissionHelper
 import com.example.focusreminder.ui.blocker.BlockerActivity
+import com.example.focusreminder.ui.overlay.FloatingTimerOverlay
 import com.example.focusreminder.ui.session.SessionContractActivity
 import kotlinx.coroutines.*
 import java.util.Calendar
@@ -25,7 +27,7 @@ class UsageMonitorService : ComponentActivityService() {
     companion object {
         const val CHANNEL_ID = "focus_monitor_service_channel"
         const val BLOCKER_CHANNEL_ID = "focus_blocker_urgent_channel"
-        const val CHRONOMETER_CHANNEL_ID = "focus_session_chronometer_channel"
+        const val CHRONOMETER_CHANNEL_ID = "focus_session_chronometer_channel_v2"
         const val WARNING_CHANNEL_ID = "focus_session_warning_channel"
 
         const val NOTIFICATION_ID = 9001
@@ -110,10 +112,13 @@ class UsageMonitorService : ComponentActivityService() {
     private var lastContractPackage: String? = null
     private var lastContractTimeMs: Long = 0L
 
+    private var floatingTimerOverlay: FloatingTimerOverlay? = null
+
     override fun onCreate() {
         super.onCreate()
         detector = ForegroundAppDetector(this)
         repo = AppRestrictionRepository.getInstance(this)
+        floatingTimerOverlay = FloatingTimerOverlay(this)
         createNotificationChannels()
     }
 
@@ -139,6 +144,7 @@ class UsageMonitorService : ComponentActivityService() {
                     lastSeenActiveTimeMs = now
 
                     showLiveChronometerNotification(name, activeSessionEndTimeMs)
+                    floatingTimerOverlay?.show(name, activeSessionEndTimeMs)
                 }
 
                 startForeground(NOTIFICATION_ID, buildForegroundNotification())
@@ -178,6 +184,11 @@ class UsageMonitorService : ComponentActivityService() {
                 if (activePkg != null) {
                     if (currentApp == activePkg) {
                         lastSeenActiveTimeMs = now
+
+                        // Ensure floating timer overlay is active in status bar during session
+                        if (floatingTimerOverlay?.isShowing == false) {
+                            floatingTimerOverlay?.show(activeSessionAppName ?: "App", activeSessionEndTimeMs)
+                        }
 
                         // Check 2-Minute Warning Alert
                         if (!hasFiredTwoMinWarning && (activeSessionEndTimeMs - now) <= (2 * 60 * 1000L) && (activeSessionEndTimeMs - now) > 0L) {
@@ -305,7 +316,7 @@ class UsageMonitorService : ComponentActivityService() {
         }
 
         val builder = NotificationCompat.Builder(this, CHRONOMETER_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_timer)
             .setContentTitle("$appName Focus Session")
             .setContentText("Focus session ticking • Live countdown active")
             .setUsesChronometer(true)
@@ -313,9 +324,12 @@ class UsageMonitorService : ComponentActivityService() {
             .setWhen(endTimeMs)
             .setShowWhen(true)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setColor(android.graphics.Color.parseColor("#059669")) // Emerald
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setColor(android.graphics.Color.parseColor("#4F46E5")) // Vibrant Indigo/Purple
             .setContentIntent(contentPendingIntent)
+
+        builder.extras.putBoolean("android.requestPromotedOngoing", true)
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(CHRONOMETER_NOTIFICATION_ID, builder.build())
@@ -338,6 +352,7 @@ class UsageMonitorService : ComponentActivityService() {
     private fun dismissChronometerNotification() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(CHRONOMETER_NOTIFICATION_ID)
+        floatingTimerOverlay?.dismiss()
     }
 
     private fun triggerBlocker(
@@ -446,13 +461,22 @@ class UsageMonitorService : ComponentActivityService() {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
 
+            try {
+                manager.deleteNotificationChannel("focus_session_chronometer_channel")
+            } catch (e: Exception) {
+                // Ignore
+            }
+
             val chronometerChannel = NotificationChannel(
                 CHRONOMETER_CHANNEL_ID,
                 "Live Focus Session Chronometer",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Live countdown timer during active app focus sessions"
-                setShowBadge(false)
+                setShowBadge(true)
+                setSound(null, null)
+                enableVibration(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
 
             val warningChannel = NotificationChannel(
