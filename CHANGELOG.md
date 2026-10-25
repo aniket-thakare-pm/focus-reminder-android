@@ -1,6 +1,13 @@
 # Focus & Reminder — Version Changelog
 
-### v1.5.4 (Current) — 2026-10-25
+### v1.5.5 (Current) — 2026-10-25
+* **Type:** Patch / Daily Usage Truncation Fix
+* **Summary:**
+  - **Eviction-Proof Daily Usage Merge:** Fixed bug where Android's in-memory `UsageEvents` ring buffer, which automatically evicts morning events as phone activity accumulates throughout the day, caused Instagram to under-report (e.g. 45m instead of 2h+).
+  - **Comprehensive Multi-Tier `maxOf`:** Upgraded `getDailyUsageMs`, `getDailyUsageMinutesMap`, and `getTotalScreenTimeTodayMinutes` to take `maxOf(eventMs, bucketMs, aggregateMs)` so persistent database records on disk are never discarded by truncated RAM event buffers.
+
+### v1.5.4 — 2026-10-25
+* **Commit:** `f6d5ee4`
 * **Type:** Patch / Notification De-Clutter & Minimalist Design
 * **Summary:**
   - **De-Cluttered to 2 Lines:** Removed all triple redundancy (`setSubText`, duplicate chronometer header, and "Wrap up before cooldown" text).

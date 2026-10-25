@@ -227,7 +227,7 @@ class ForegroundAppDetector(private val context: Context) {
 
     /**
      * Queries accurate foreground usage milliseconds for [packageName] strictly from today's midnight (00:00:00).
-     * Robust multi-tier calculation: High-precision events -> OS daily bucket -> Aggregated stats.
+     * Robust multi-tier calculation: Merges live RAM event buffer with persistent OS daily buckets & aggregate stats.
      */
     fun getDailyUsageMs(packageName: String): Long {
         val manager = usageStatsManager ?: return 0L
@@ -240,14 +240,12 @@ class ForegroundAppDetector(private val context: Context) {
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
 
-        // 1. High-precision event calculation (if events are in memory)
+        // 1. High-precision event calculation (from in-memory buffer)
         val eventMap = queryAccurateDailyUsageMap()
         val eventMs = eventMap[packageName] ?: 0L
-        if (eventMs > 0L) {
-            return eventMs
-        }
 
-        // 2. Query daily buckets with 24h lookback to capture daily buckets regardless of OEM rollover hour
+        // 2. Query persistent OS daily buckets (contains historical sessions flushed to disk)
+        var bucketMs = 0L
         try {
             val list = manager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
@@ -258,21 +256,23 @@ class ForegroundAppDetector(private val context: Context) {
                 .filter { it.packageName == packageName && it.lastTimeUsed >= midnightMs }
                 .maxByOrNull { it.firstTimeStamp }
 
-            if (todayStat != null && todayStat.totalTimeInForeground > 0L) {
-                return todayStat.totalTimeInForeground
+            if (todayStat != null) {
+                bucketMs = todayStat.totalTimeInForeground
             }
         } catch (_: Exception) {}
 
-        // 3. Fallback to aggregated stats if daily bucket is missing or empty
+        // 3. Fallback/Corroboration from aggregated stats
+        var aggregateMs = 0L
         try {
             val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
             val stat = aggregated[packageName]
-            if (stat != null && stat.lastTimeUsed >= midnightMs && stat.totalTimeInForeground > 0L) {
-                return stat.totalTimeInForeground
+            if (stat != null && stat.lastTimeUsed >= midnightMs) {
+                aggregateMs = stat.totalTimeInForeground
             }
         } catch (_: Exception) {}
 
-        return 0L
+        // Crucial: Use maxOf so truncated RAM event buffers never discard persistent daily history on disk
+        return maxOf(eventMs, bucketMs, aggregateMs)
     }
 
     /**
@@ -290,58 +290,48 @@ class ForegroundAppDetector(private val context: Context) {
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
 
-        val result = mutableMapOf<String, Int>()
-
-        // 1. High-precision event calculation
+        // 1. Event buffer map
         val eventMap = queryAccurateDailyUsageMap()
-        for (pkg in packageNames) {
-            val ms = eventMap[pkg] ?: 0L
-            if (ms > 0L) {
-                result[pkg] = (ms / (1000 * 60)).toInt()
-            }
-        }
 
-        // 2. Query OS daily usage buckets for any missing or 0-minute packages (covers events evicted by OEM memory limits)
-        val missingPackages = packageNames.filter { (result[it] ?: 0) <= 0 }
-        if (missingPackages.isNotEmpty()) {
-            try {
-                val list = manager.queryUsageStats(
-                    UsageStatsManager.INTERVAL_DAILY,
-                    midnightMs - (24 * 60 * 60 * 1000L),
-                    nowMs
-                )
-                val grouped = list.groupBy { it.packageName }
-                for (pkg in missingPackages) {
-                    val todayStat = grouped[pkg]
-                        ?.filter { it.lastTimeUsed >= midnightMs }
-                        ?.maxByOrNull { it.firstTimeStamp }
+        // 2. Query OS daily usage buckets
+        val bucketMap = mutableMapOf<String, Long>()
+        try {
+            val list = manager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY,
+                midnightMs - (24 * 60 * 60 * 1000L),
+                nowMs
+            )
+            val grouped = list.groupBy { it.packageName }
+            for (pkg in packageNames) {
+                val todayStat = grouped[pkg]
+                    ?.filter { it.lastTimeUsed >= midnightMs }
+                    ?.maxByOrNull { it.firstTimeStamp }
 
-                    if (todayStat != null && todayStat.totalTimeInForeground > 0L) {
-                        result[pkg] = (todayStat.totalTimeInForeground / (1000 * 60)).toInt()
-                    }
+                if (todayStat != null) {
+                    bucketMap[pkg] = todayStat.totalTimeInForeground
                 }
-            } catch (_: Exception) {}
-        }
-
-        // 3. Fallback to aggregated stats if still missing
-        val stillMissing = packageNames.filter { (result[it] ?: 0) <= 0 }
-        if (stillMissing.isNotEmpty()) {
-            try {
-                val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-                for (pkg in stillMissing) {
-                    val stat = aggregated[pkg]
-                    if (stat != null && stat.lastTimeUsed >= midnightMs) {
-                        result[pkg] = (stat.totalTimeInForeground / (1000 * 60)).toInt()
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-
-        // Default any remaining unrecorded packages to 0
-        for (pkg in packageNames) {
-            if (!result.containsKey(pkg)) {
-                result[pkg] = 0
             }
+        } catch (_: Exception) {}
+
+        // 3. Aggregated stats
+        val aggregateMap = mutableMapOf<String, Long>()
+        try {
+            val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+            for (pkg in packageNames) {
+                val stat = aggregated[pkg]
+                if (stat != null && stat.lastTimeUsed >= midnightMs) {
+                    aggregateMap[pkg] = stat.totalTimeInForeground
+                }
+            }
+        } catch (_: Exception) {}
+
+        val result = mutableMapOf<String, Int>()
+        for (pkg in packageNames) {
+            val eMs = eventMap[pkg] ?: 0L
+            val bMs = bucketMap[pkg] ?: 0L
+            val aMs = aggregateMap[pkg] ?: 0L
+            val bestMs = maxOf(eMs, bMs, aMs)
+            result[pkg] = (bestMs / (1000 * 60)).toInt()
         }
 
         return result
@@ -369,11 +359,8 @@ class ForegroundAppDetector(private val context: Context) {
             .values
             .sum()
 
-        if (eventTotalMs > 0L) {
-            return (eventTotalMs / (1000 * 60)).toInt()
-        }
-
         // 2. Daily buckets query with 24h lookback
+        var bucketTotalMs = 0L
         try {
             val list = manager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
@@ -381,7 +368,6 @@ class ForegroundAppDetector(private val context: Context) {
                 nowMs
             )
             val grouped = list.groupBy { it.packageName }
-            var totalMs = 0L
 
             for ((pkg, statsGroup) in grouped) {
                 if (isSystemOrLauncherPackage(pkg)) continue
@@ -391,30 +377,24 @@ class ForegroundAppDetector(private val context: Context) {
                     .maxByOrNull { it.firstTimeStamp }
 
                 if (todayStat != null) {
-                    totalMs += todayStat.totalTimeInForeground
+                    bucketTotalMs += todayStat.totalTimeInForeground
                 }
-            }
-
-            if (totalMs > 0L) {
-                return (totalMs / (1000 * 60)).toInt()
             }
         } catch (_: Exception) {}
 
         // 3. Fallback to aggregated stats
+        var aggregateTotalMs = 0L
         try {
             val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-            val totalMs = aggregated
+            aggregateTotalMs = aggregated
                 .filterKeys { pkg -> !isSystemOrLauncherPackage(pkg) }
                 .values
                 .filter { it.lastTimeUsed >= midnightMs }
                 .sumOf { it.totalTimeInForeground }
-
-            if (totalMs > 0L) {
-                return (totalMs / (1000 * 60)).toInt()
-            }
         } catch (_: Exception) {}
 
-        return 0
+        val bestTotalMs = maxOf(eventTotalMs, bucketTotalMs, aggregateTotalMs)
+        return (bestTotalMs / (1000 * 60)).toInt()
     }
 
     private fun isSystemOrLauncherPackage(pkg: String): Boolean {
