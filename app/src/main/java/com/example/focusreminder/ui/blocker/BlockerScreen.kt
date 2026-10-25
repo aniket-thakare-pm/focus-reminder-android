@@ -29,6 +29,8 @@ fun BlockerScreen(
     restrictedAppName: String = "Restricted App",
     isDailyLimit: Boolean = false,
     remainingCooldownSeconds: Long = 1800L, // 30 mins
+    lockReason: String? = null,
+    goalName: String? = null,
     onNavigateHome: () -> Unit,
     onStartEmergencyReflection: () -> Unit
 ) {
@@ -86,8 +88,19 @@ fun BlockerScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                if (goalName != null) {
+                    Text(
+                        text = goalName.uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        color = EmeraldDark,
+                        letterSpacing = 1.2.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
                 Text(
-                    text = "Intentional Pause",
+                    text = if (goalName != null) "Focus Window Active" else "Intentional Pause",
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Black,
                         color = TextPrimary
@@ -96,10 +109,10 @@ fun BlockerScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                val reasonText = if (isDailyLimit) {
-                    "Daily total usage limit reached for $restrictedAppName"
-                } else {
-                    "Rolling 60m budget reached for $restrictedAppName"
+                val reasonText = when {
+                    lockReason != null -> lockReason
+                    isDailyLimit -> "Daily total usage limit reached for $restrictedAppName"
+                    else -> "Rolling 60m budget reached for $restrictedAppName"
                 }
 
                 Text(

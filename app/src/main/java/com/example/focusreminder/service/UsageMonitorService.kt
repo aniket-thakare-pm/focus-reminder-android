@@ -10,14 +10,18 @@ import com.example.focusreminder.MainActivity
 import com.example.focusreminder.R
 import com.example.focusreminder.domain.engine.CooldownManager
 import com.example.focusreminder.domain.engine.RollingWindowUsageCalculator
+import com.example.focusreminder.domain.model.GoalEnforcementMode
 import com.example.focusreminder.platform.AppRestrictionRepository
+import com.example.focusreminder.platform.DefaultAllowedAppsHelper
 import com.example.focusreminder.platform.ForegroundAppDetector
 import com.example.focusreminder.platform.UsagePermissionHelper
 import com.example.focusreminder.platform.analytics.AnalyticsRepository
+import com.example.focusreminder.platform.analytics.SectorConfigStore
 import com.example.focusreminder.ui.blocker.BlockerActivity
 import com.example.focusreminder.ui.session.SessionContractActivity
 import kotlinx.coroutines.*
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * Foreground Service for continuous usage monitoring, active session chronometer, and focus enforcement.
@@ -98,6 +102,7 @@ class UsageMonitorService : ComponentActivityService() {
     private lateinit var detector: ForegroundAppDetector
     private lateinit var repo: AppRestrictionRepository
     private lateinit var analyticsRepo: AnalyticsRepository
+    private lateinit var sectorStore: SectorConfigStore
 
     private var lastBlockedPackage: String? = null
     private var lastBlockedTimeMs: Long = 0L
@@ -127,6 +132,7 @@ class UsageMonitorService : ComponentActivityService() {
         detector = ForegroundAppDetector(this)
         repo = AppRestrictionRepository.getInstance(this)
         analyticsRepo = AnalyticsRepository.getInstance(this)
+        sectorStore = SectorConfigStore.getInstance(this)
         createNotificationChannels()
     }
 
@@ -304,6 +310,64 @@ class UsageMonitorService : ComponentActivityService() {
                     }
                 }
 
+                // ================= FOCUS BUFFER / SCHEDULED GOAL ENFORCEMENT =================
+                val activeGoal = sectorStore.getActiveEnforcingGoal(now)
+                if (activeGoal != null) {
+                    val remainingSecs = sectorStore.getSecondsRemainingInGoal(activeGoal, now)
+                    val endFormatted = String.format(Locale.US, "%02d:%02d", activeGoal.endHour, activeGoal.endMinute)
+
+                    when (activeGoal.enforcementMode) {
+                        GoalEnforcementMode.STRICT_LOCKDOWN -> {
+                            // Mode 3: Block ALL apps except system/launcher and whitelisted essential apps
+                            val isAllowed = DefaultAllowedAppsHelper.isAlwaysExemptSystemPackage(currentApp, this@UsageMonitorService) ||
+                                    activeGoal.allowedPackages.contains(currentApp)
+
+                            if (!isAllowed) {
+                                if (!repo.hasActiveEmergencyOverride(currentApp)) {
+                                    val appLabel = repo.getAppName(currentApp, currentApp.substringAfterLast("."))
+                                    if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
+                                        lastBlockedPackage = currentApp
+                                        lastBlockedTimeMs = now
+                                        triggerBlocker(
+                                            packageName = currentApp,
+                                            appName = appLabel,
+                                            isDailyLimit = false,
+                                            cooldownSeconds = remainingSecs,
+                                            lockReason = "Strict Lockdown active until $endFormatted • Only essential apps allowed",
+                                            goalName = activeGoal.name
+                                        )
+                                    }
+                                    continue
+                                }
+                            }
+                        }
+                        GoalEnforcementMode.BLOCK_CONTROLLED_APPS -> {
+                            // Mode 2: Block all controlled/monitored apps
+                            if (restrictedPackages.contains(currentApp)) {
+                                if (!repo.hasActiveEmergencyOverride(currentApp)) {
+                                    val appLabel = repo.getAppName(currentApp, currentApp.substringAfterLast("."))
+                                    if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
+                                        lastBlockedPackage = currentApp
+                                        lastBlockedTimeMs = now
+                                        triggerBlocker(
+                                            packageName = currentApp,
+                                            appName = appLabel,
+                                            isDailyLimit = false,
+                                            cooldownSeconds = remainingSecs,
+                                            lockReason = "Focus Window active until $endFormatted",
+                                            goalName = activeGoal.name
+                                        )
+                                    }
+                                    continue
+                                }
+                            }
+                        }
+                        GoalEnforcementMode.TRACKING_ONLY -> {
+                            // Mode 1: Tracking only
+                        }
+                    }
+                }
+
                 // Check if newly foregrounded app is restricted
                 if (restrictedPackages.contains(currentApp)) {
                     // 1. Check emergency override
@@ -439,13 +503,17 @@ class UsageMonitorService : ComponentActivityService() {
         packageName: String,
         appName: String,
         isDailyLimit: Boolean,
-        cooldownSeconds: Long
+        cooldownSeconds: Long,
+        lockReason: String? = null,
+        goalName: String? = null
     ) {
         val blockerIntent = BlockerActivity.createIntent(
             context = this@UsageMonitorService,
             appName = appName,
             isDailyLimit = isDailyLimit,
-            cooldownSeconds = cooldownSeconds
+            cooldownSeconds = cooldownSeconds,
+            lockReason = lockReason,
+            goalName = goalName
         )
 
         if (UsagePermissionHelper.hasOverlayPermission(this@UsageMonitorService)) {

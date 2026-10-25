@@ -53,19 +53,36 @@ data class DayUsagePoint(
     val isToday: Boolean
 )
 
+enum class GoalEnforcementMode {
+    TRACKING_ONLY,            // Option 1: Track screen time & breaches in analytics, no apps locked
+    BLOCK_CONTROLLED_APPS,    // Option 2: Lock all controlled/monitored apps (Instagram, YouTube, etc.)
+    STRICT_LOCKDOWN           // Option 3: Lock ALL apps on the device except allowed essential apps
+}
+
 data class BufferGoal(
     val id: String,
     val name: String,
     val startHour: Int,
-    val endHour: Int
+    val startMinute: Int = 0,
+    val endHour: Int,
+    val endMinute: Int = 0,
+    val enforcementMode: GoalEnforcementMode = GoalEnforcementMode.TRACKING_ONLY,
+    val allowedPackages: Set<String> = emptySet(),
+    val isEnabled: Boolean = true
 )
 
 data class BufferGoalStatus(
     val id: String,
     val name: String,
-    val targetBufferHours: String, // e.g. "23:00 – 00:00"
+    val targetBufferHours: String, // e.g. "23:00 – 07:00"
     val startHour: Int,
+    val startMinute: Int = 0,
     val endHour: Int,
+    val endMinute: Int = 0,
+    val enforcementMode: GoalEnforcementMode = GoalEnforcementMode.TRACKING_ONLY,
+    val allowedPackages: Set<String> = emptySet(),
+    val allowedPackageCount: Int = 0,
+    val isEnabled: Boolean = true,
     val isPassed: Boolean,
     val breachMinutes: Int,
     val breachTimeDesc: String,

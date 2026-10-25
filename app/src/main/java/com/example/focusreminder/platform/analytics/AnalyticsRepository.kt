@@ -551,22 +551,28 @@ class AnalyticsRepository private constructor(private val context: Context) {
 
         val goalStatuses = bufferGoals.map { goal ->
             val startH = goal.startHour
+            val startM = goal.startMinute
             val endH = goal.endHour
+            val endM = goal.endMinute
 
             val goalSessionsToday = sessions.filter { s ->
-                val cal = Calendar.getInstance().apply { timeInMillis = s.startTimeMs }
-                val h = cal.get(Calendar.HOUR_OF_DAY)
-                if (startH <= endH) h in startH until endH
-                else h >= startH || h < endH
+                val inWindow = sectorStore.isTimeInGoalWindow(goal, s.startTimeMs)
+                if (!inWindow) return@filter false
+
+                when (goal.enforcementMode) {
+                    GoalEnforcementMode.TRACKING_ONLY -> true
+                    GoalEnforcementMode.BLOCK_CONTROLLED_APPS -> controlled.contains(s.packageName)
+                    GoalEnforcementMode.STRICT_LOCKDOWN -> !goal.allowedPackages.contains(s.packageName)
+                }
             }
             val breachMins = (goalSessionsToday.sumOf { it.durationMs } / (60 * 1000L)).toInt()
             val passed = breachMins == 0
             val breachDesc = if (!passed && goalSessionsToday.isNotEmpty()) {
                 val first = goalSessionsToday.first()
                 val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-                "Breached at ${sdf.format(Date(first.startTimeMs))} (${breachMins}m)"
+                "Used ${first.appName} at ${sdf.format(Date(first.startTimeMs))} (${breachMins}m)"
             } else {
-                "No screen time during buffer"
+                "No restricted usage during window"
             }
 
             var metDays = 0
@@ -577,9 +583,14 @@ class AnalyticsRepository private constructor(private val context: Context) {
                 val key = "${c.get(Calendar.YEAR)}_${c.get(Calendar.DAY_OF_YEAR)}"
                 val dayList = daysGrouped[key] ?: emptyList()
                 val dayBreach = dayList.filter { s ->
-                    val ch = Calendar.getInstance().apply { timeInMillis = s.startTimeMs }.get(Calendar.HOUR_OF_DAY)
-                    if (startH <= endH) ch in startH until endH
-                    else ch >= startH || ch < endH
+                    val inWindow = sectorStore.isTimeInGoalWindow(goal, s.startTimeMs)
+                    if (!inWindow) return@filter false
+
+                    when (goal.enforcementMode) {
+                        GoalEnforcementMode.TRACKING_ONLY -> true
+                        GoalEnforcementMode.BLOCK_CONTROLLED_APPS -> controlled.contains(s.packageName)
+                        GoalEnforcementMode.STRICT_LOCKDOWN -> !goal.allowedPackages.contains(s.packageName)
+                    }
                 }.sumOf { it.durationMs }
                 if (dayBreach == 0L) metDays++
             }
@@ -587,9 +598,15 @@ class AnalyticsRepository private constructor(private val context: Context) {
             BufferGoalStatus(
                 id = goal.id,
                 name = goal.name,
-                targetBufferHours = String.format(Locale.US, "%02d:00 – %02d:00", startH, endH),
+                targetBufferHours = String.format(Locale.US, "%02d:%02d – %02d:%02d", startH, startM, endH, endM),
                 startHour = startH,
+                startMinute = startM,
                 endHour = endH,
+                endMinute = endM,
+                enforcementMode = goal.enforcementMode,
+                allowedPackages = goal.allowedPackages,
+                allowedPackageCount = goal.allowedPackages.size,
+                isEnabled = goal.isEnabled,
                 isPassed = passed,
                 breachMinutes = breachMins,
                 breachTimeDesc = breachDesc,
