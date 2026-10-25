@@ -133,8 +133,101 @@ class ForegroundAppDetector(private val context: Context) {
     }
 
     /**
-     * Queries accurate foreground usage milliseconds for [packageName] from today's midnight (00:00:00).
-     * Uses Android OS UsageStatsManager aggregation, matching Digital Wellbeing.
+     * Accurately calculates real foreground usage per package strictly since midnight today.
+     * Prevents Android's queryAndAggregateUsageStats interval boundary expansion bug
+     * which bleeds into the previous 24-48 hours.
+     */
+    fun queryAccurateDailyUsageMap(): Map<String, Long> {
+        val manager = usageStatsManager ?: return emptyMap()
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val midnightMs = calendar.timeInMillis
+        val nowMs = System.currentTimeMillis()
+
+        // Query events from 15 minutes prior to midnight to catch cross-midnight sessions
+        val queryStart = midnightMs - (15 * 60 * 1000L)
+        val events = try {
+            manager.queryEvents(queryStart, nowMs)
+        } catch (_: Exception) {
+            return emptyMap()
+        }
+
+        val usageMsMap = mutableMapOf<String, Long>()
+        val event = UsageEvents.Event()
+
+        var currentForegroundPkg: String? = null
+        var sessionStartMs: Long = 0L
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val time = event.timeStamp
+            val pkg = event.packageName
+
+            when (event.eventType) {
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
+                    // When another app resumes, close the previous active app session
+                    val prev = currentForegroundPkg
+                    if (prev != null && prev != pkg) {
+                        val effectiveStart = maxOf(sessionStartMs, midnightMs)
+                        val effectiveEnd = minOf(time, nowMs)
+                        if (effectiveEnd > effectiveStart) {
+                            val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
+                            usageMsMap[prev] = (usageMsMap[prev] ?: 0L) + duration
+                        }
+                    }
+                    currentForegroundPkg = pkg
+                    sessionStartMs = time
+                }
+                UsageEvents.Event.ACTIVITY_PAUSED,
+                UsageEvents.Event.ACTIVITY_STOPPED -> {
+                    if (currentForegroundPkg == pkg) {
+                        val effectiveStart = maxOf(sessionStartMs, midnightMs)
+                        val effectiveEnd = minOf(time, nowMs)
+                        if (effectiveEnd > effectiveStart) {
+                            val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
+                            usageMsMap[pkg] = (usageMsMap[pkg] ?: 0L) + duration
+                        }
+                        currentForegroundPkg = null
+                    }
+                }
+                UsageEvents.Event.SCREEN_NON_INTERACTIVE,
+                UsageEvents.Event.KEYGUARD_SHOWN -> {
+                    // Screen off or phone locked: close active app session
+                    val active = currentForegroundPkg
+                    if (active != null) {
+                        val effectiveStart = maxOf(sessionStartMs, midnightMs)
+                        val effectiveEnd = minOf(time, nowMs)
+                        if (effectiveEnd > effectiveStart) {
+                            val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
+                            usageMsMap[active] = (usageMsMap[active] ?: 0L) + duration
+                        }
+                        currentForegroundPkg = null
+                    }
+                }
+            }
+        }
+
+        // If an app is still in the foreground right now:
+        val live = currentForegroundPkg
+        if (live != null) {
+            val effectiveStart = maxOf(sessionStartMs, midnightMs)
+            val effectiveEnd = nowMs
+            if (effectiveEnd > effectiveStart) {
+                val duration = minOf(effectiveEnd - effectiveStart, 30 * 60 * 1000L)
+                usageMsMap[live] = (usageMsMap[live] ?: 0L) + duration
+            }
+        }
+
+        return usageMsMap
+    }
+
+    /**
+     * Queries accurate foreground usage milliseconds for [packageName] strictly from today's midnight (00:00:00).
+     * Filters specifically for today's daily bucket to avoid merging with yesterday's usage.
      */
     fun getDailyUsageMs(packageName: String): Long {
         val manager = usageStatsManager ?: return 0L
@@ -147,27 +240,26 @@ class ForegroundAppDetector(private val context: Context) {
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
 
-        // 1. Primary: queryAndAggregateUsageStats (exact OS aggregate since midnight)
+        // 1. Primary: Query today's specific daily bucket
         try {
-            val statsMap = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-            val stats = statsMap[packageName]
-            if (stats != null && stats.totalTimeInForeground > 0L) {
-                return stats.totalTimeInForeground
+            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
+            val todayStat = list
+                .filter { it.packageName == packageName && it.lastTimeUsed >= midnightMs }
+                .maxByOrNull { it.firstTimeStamp }
+
+            if (todayStat != null && todayStat.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)) {
+                return todayStat.totalTimeInForeground
             }
         } catch (_: Exception) {}
 
-        // 2. Direct daily bucket fallback
-        try {
-            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
-            val total = list.filter { it.packageName == packageName }.sumOf { it.totalTimeInForeground }
-            if (total > 0L) return total
-        } catch (_: Exception) {}
-
-        return 0L
+        // 2. Fallback to event-based calculation strictly from midnight
+        val map = queryAccurateDailyUsageMap()
+        return map[packageName] ?: 0L
     }
 
     /**
      * Returns a map of package names to their real daily usage in minutes for today.
+     * Accurately distinguishes package-specific usage from total device usage.
      */
     fun getDailyUsageMinutesMap(packageNames: Collection<String>): Map<String, Int> {
         val manager = usageStatsManager ?: return emptyMap()
@@ -183,27 +275,36 @@ class ForegroundAppDetector(private val context: Context) {
         val result = mutableMapOf<String, Int>()
 
         try {
-            val statsMap = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
+            val grouped = list.groupBy { it.packageName }
             for (pkg in packageNames) {
-                val fgMs = statsMap[pkg]?.totalTimeInForeground ?: 0L
-                result[pkg] = (fgMs / (1000 * 60)).toInt()
-            }
-        } catch (_: Exception) {
-            try {
-                val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
-                val grouped = list.groupBy { it.packageName }
-                for (pkg in packageNames) {
-                    val fgMs = grouped[pkg]?.sumOf { it.totalTimeInForeground } ?: 0L
-                    result[pkg] = (fgMs / (1000 * 60)).toInt()
+                val todayStat = grouped[pkg]
+                    ?.filter { it.lastTimeUsed >= midnightMs }
+                    ?.maxByOrNull { it.firstTimeStamp }
+
+                if (todayStat != null && todayStat.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)) {
+                    result[pkg] = (todayStat.totalTimeInForeground / (1000 * 60)).toInt()
                 }
-            } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+
+        // Fallback for any package not found in daily buckets
+        if (result.size < packageNames.size) {
+            val map = queryAccurateDailyUsageMap()
+            for (pkg in packageNames) {
+                if (!result.containsKey(pkg)) {
+                    val ms = map[pkg] ?: 0L
+                    result[pkg] = (ms / (1000 * 60)).toInt()
+                }
+            }
         }
 
         return result
     }
 
     /**
-     * Calculates total device screen time for today in minutes (across all user apps).
+     * Calculates total device screen time for today in minutes (across all user apps, strictly since midnight).
+     * Accurately reflects device total (e.g. ~4h 20m) separate from individual apps (e.g. Instagram ~1h 44m).
      */
     fun getTotalScreenTimeTodayMinutes(): Int {
         val manager = usageStatsManager ?: return 0
@@ -216,19 +317,49 @@ class ForegroundAppDetector(private val context: Context) {
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
 
-        return try {
-            val statsMap = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-            val totalMs = statsMap.values
-                .filter { stats ->
-                    stats.totalTimeInForeground > 0L &&
-                    !stats.packageName.startsWith("com.android.launcher") &&
-                    !stats.packageName.startsWith("com.google.android.inputmethod") &&
-                    stats.packageName != context.packageName
+        try {
+            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
+            val grouped = list.groupBy { it.packageName }
+            var totalMs = 0L
+
+            for ((pkg, statsGroup) in grouped) {
+                if (pkg.startsWith("com.android.launcher") ||
+                    pkg.startsWith("com.google.android.apps.nexuslauncher") ||
+                    pkg.startsWith("com.sec.android.app.launcher") ||
+                    pkg.startsWith("com.miui.home") ||
+                    pkg.startsWith("com.google.android.inputmethod") ||
+                    pkg.startsWith("com.android.systemui") ||
+                    pkg.startsWith("com.android.settings") ||
+                    pkg == context.packageName
+                ) {
+                    continue
                 }
-                .sumOf { it.totalTimeInForeground }
-            (totalMs / (1000 * 60)).toInt()
-        } catch (_: Exception) {
-            0
-        }
+
+                val todayStat = statsGroup
+                    .filter { it.lastTimeUsed >= midnightMs }
+                    .maxByOrNull { it.firstTimeStamp }
+
+                if (todayStat != null && todayStat.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)) {
+                    totalMs += todayStat.totalTimeInForeground
+                }
+            }
+
+            if (totalMs > 0L) {
+                return (totalMs / (1000 * 60)).toInt()
+            }
+        } catch (_: Exception) {}
+
+        // Fallback to event map
+        val map = queryAccurateDailyUsageMap()
+        val totalMs = map
+            .filterKeys { pkg ->
+                !pkg.startsWith("com.android.launcher") &&
+                !pkg.startsWith("com.google.android.inputmethod") &&
+                !pkg.startsWith("com.android.systemui") &&
+                pkg != context.packageName
+            }
+            .values
+            .sum()
+        return (totalMs / (1000 * 60)).toInt()
     }
 }

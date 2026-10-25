@@ -394,9 +394,7 @@ fun DashboardScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text("TOTAL SCREEN", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextMuted)
-                            val devHours = totalDeviceScreenTimeMin / 60
-                            val devMins = totalDeviceScreenTimeMin % 60
-                            Text("${devHours}h ${devMins}m", fontSize = 11.sp, fontWeight = FontWeight.Black, color = TextPrimary, fontFamily = FontFamily.Monospace)
+                            Text(formatHoursMinutes(totalDeviceScreenTimeMin), fontSize = 11.sp, fontWeight = FontWeight.Black, color = TextPrimary, fontFamily = FontFamily.Monospace)
                         }
                     }
 
