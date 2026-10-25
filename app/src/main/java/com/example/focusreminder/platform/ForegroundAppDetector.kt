@@ -227,7 +227,7 @@ class ForegroundAppDetector(private val context: Context) {
 
     /**
      * Queries accurate foreground usage milliseconds for [packageName] strictly from today's midnight (00:00:00).
-     * Filters specifically for today's daily bucket to avoid merging with yesterday's usage.
+     * Robust multi-tier calculation: High-precision events -> OS daily bucket -> Aggregated stats.
      */
     fun getDailyUsageMs(packageName: String): Long {
         val manager = usageStatsManager ?: return 0L
@@ -240,26 +240,44 @@ class ForegroundAppDetector(private val context: Context) {
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
 
-        // 1. Primary: Query today's specific daily bucket
+        // 1. High-precision event calculation (if events are in memory)
+        val eventMap = queryAccurateDailyUsageMap()
+        val eventMs = eventMap[packageName] ?: 0L
+        if (eventMs > 0L) {
+            return eventMs
+        }
+
+        // 2. Query daily buckets with 24h lookback to capture daily buckets regardless of OEM rollover hour
         try {
-            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
+            val list = manager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY,
+                midnightMs - (24 * 60 * 60 * 1000L),
+                nowMs
+            )
             val todayStat = list
                 .filter { it.packageName == packageName && it.lastTimeUsed >= midnightMs }
                 .maxByOrNull { it.firstTimeStamp }
 
-            if (todayStat != null && todayStat.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)) {
+            if (todayStat != null && todayStat.totalTimeInForeground > 0L) {
                 return todayStat.totalTimeInForeground
             }
         } catch (_: Exception) {}
 
-        // 2. Fallback to event-based calculation strictly from midnight
-        val map = queryAccurateDailyUsageMap()
-        return map[packageName] ?: 0L
+        // 3. Fallback to aggregated stats if daily bucket is missing or empty
+        try {
+            val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+            val stat = aggregated[packageName]
+            if (stat != null && stat.lastTimeUsed >= midnightMs && stat.totalTimeInForeground > 0L) {
+                return stat.totalTimeInForeground
+            }
+        } catch (_: Exception) {}
+
+        return 0L
     }
 
     /**
      * Returns a map of package names to their real daily usage in minutes for today.
-     * Accurately distinguishes package-specific usage from total device usage.
+     * Uses multi-tier evaluation to work reliably across all Android versions and OEM skins.
      */
     fun getDailyUsageMinutesMap(packageNames: Collection<String>): Map<String, Int> {
         val manager = usageStatsManager ?: return emptyMap()
@@ -274,28 +292,55 @@ class ForegroundAppDetector(private val context: Context) {
 
         val result = mutableMapOf<String, Int>()
 
-        try {
-            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
-            val grouped = list.groupBy { it.packageName }
-            for (pkg in packageNames) {
-                val todayStat = grouped[pkg]
-                    ?.filter { it.lastTimeUsed >= midnightMs }
-                    ?.maxByOrNull { it.firstTimeStamp }
-
-                if (todayStat != null && todayStat.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)) {
-                    result[pkg] = (todayStat.totalTimeInForeground / (1000 * 60)).toInt()
-                }
+        // 1. High-precision event calculation
+        val eventMap = queryAccurateDailyUsageMap()
+        for (pkg in packageNames) {
+            val ms = eventMap[pkg] ?: 0L
+            if (ms > 0L) {
+                result[pkg] = (ms / (1000 * 60)).toInt()
             }
-        } catch (_: Exception) {}
+        }
 
-        // Fallback for any package not found in daily buckets
-        if (result.size < packageNames.size) {
-            val map = queryAccurateDailyUsageMap()
-            for (pkg in packageNames) {
-                if (!result.containsKey(pkg)) {
-                    val ms = map[pkg] ?: 0L
-                    result[pkg] = (ms / (1000 * 60)).toInt()
+        // 2. Query OS daily usage buckets for any missing or 0-minute packages (covers events evicted by OEM memory limits)
+        val missingPackages = packageNames.filter { (result[it] ?: 0) <= 0 }
+        if (missingPackages.isNotEmpty()) {
+            try {
+                val list = manager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    midnightMs - (24 * 60 * 60 * 1000L),
+                    nowMs
+                )
+                val grouped = list.groupBy { it.packageName }
+                for (pkg in missingPackages) {
+                    val todayStat = grouped[pkg]
+                        ?.filter { it.lastTimeUsed >= midnightMs }
+                        ?.maxByOrNull { it.firstTimeStamp }
+
+                    if (todayStat != null && todayStat.totalTimeInForeground > 0L) {
+                        result[pkg] = (todayStat.totalTimeInForeground / (1000 * 60)).toInt()
+                    }
                 }
+            } catch (_: Exception) {}
+        }
+
+        // 3. Fallback to aggregated stats if still missing
+        val stillMissing = packageNames.filter { (result[it] ?: 0) <= 0 }
+        if (stillMissing.isNotEmpty()) {
+            try {
+                val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+                for (pkg in stillMissing) {
+                    val stat = aggregated[pkg]
+                    if (stat != null && stat.lastTimeUsed >= midnightMs) {
+                        result[pkg] = (stat.totalTimeInForeground / (1000 * 60)).toInt()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // Default any remaining unrecorded packages to 0
+        for (pkg in packageNames) {
+            if (!result.containsKey(pkg)) {
+                result[pkg] = 0
             }
         }
 
@@ -304,7 +349,7 @@ class ForegroundAppDetector(private val context: Context) {
 
     /**
      * Calculates total device screen time for today in minutes (across all user apps, strictly since midnight).
-     * Accurately reflects device total (e.g. ~4h 20m) separate from individual apps (e.g. Instagram ~1h 44m).
+     * Accurately reflects device total separate from individual apps.
      */
     fun getTotalScreenTimeTodayMinutes(): Int {
         val manager = usageStatsManager ?: return 0
@@ -317,29 +362,35 @@ class ForegroundAppDetector(private val context: Context) {
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
 
+        // 1. High-precision event calculation across all packages
+        val eventMap = queryAccurateDailyUsageMap()
+        val eventTotalMs = eventMap
+            .filterKeys { pkg -> !isSystemOrLauncherPackage(pkg) }
+            .values
+            .sum()
+
+        if (eventTotalMs > 0L) {
+            return (eventTotalMs / (1000 * 60)).toInt()
+        }
+
+        // 2. Daily buckets query with 24h lookback
         try {
-            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
+            val list = manager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY,
+                midnightMs - (24 * 60 * 60 * 1000L),
+                nowMs
+            )
             val grouped = list.groupBy { it.packageName }
             var totalMs = 0L
 
             for ((pkg, statsGroup) in grouped) {
-                if (pkg.startsWith("com.android.launcher") ||
-                    pkg.startsWith("com.google.android.apps.nexuslauncher") ||
-                    pkg.startsWith("com.sec.android.app.launcher") ||
-                    pkg.startsWith("com.miui.home") ||
-                    pkg.startsWith("com.google.android.inputmethod") ||
-                    pkg.startsWith("com.android.systemui") ||
-                    pkg.startsWith("com.android.settings") ||
-                    pkg == context.packageName
-                ) {
-                    continue
-                }
+                if (isSystemOrLauncherPackage(pkg)) continue
 
                 val todayStat = statsGroup
                     .filter { it.lastTimeUsed >= midnightMs }
                     .maxByOrNull { it.firstTimeStamp }
 
-                if (todayStat != null && todayStat.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)) {
+                if (todayStat != null) {
                     totalMs += todayStat.totalTimeInForeground
                 }
             }
@@ -349,17 +400,31 @@ class ForegroundAppDetector(private val context: Context) {
             }
         } catch (_: Exception) {}
 
-        // Fallback to event map
-        val map = queryAccurateDailyUsageMap()
-        val totalMs = map
-            .filterKeys { pkg ->
-                !pkg.startsWith("com.android.launcher") &&
-                !pkg.startsWith("com.google.android.inputmethod") &&
-                !pkg.startsWith("com.android.systemui") &&
-                pkg != context.packageName
+        // 3. Fallback to aggregated stats
+        try {
+            val aggregated = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+            val totalMs = aggregated
+                .filterKeys { pkg -> !isSystemOrLauncherPackage(pkg) }
+                .values
+                .filter { it.lastTimeUsed >= midnightMs }
+                .sumOf { it.totalTimeInForeground }
+
+            if (totalMs > 0L) {
+                return (totalMs / (1000 * 60)).toInt()
             }
-            .values
-            .sum()
-        return (totalMs / (1000 * 60)).toInt()
+        } catch (_: Exception) {}
+
+        return 0
+    }
+
+    private fun isSystemOrLauncherPackage(pkg: String): Boolean {
+        return pkg.startsWith("com.android.launcher") ||
+                pkg.startsWith("com.google.android.apps.nexuslauncher") ||
+                pkg.startsWith("com.sec.android.app.launcher") ||
+                pkg.startsWith("com.miui.home") ||
+                pkg.startsWith("com.google.android.inputmethod") ||
+                pkg.startsWith("com.android.systemui") ||
+                pkg.startsWith("com.android.settings") ||
+                pkg == context.packageName
     }
 }
