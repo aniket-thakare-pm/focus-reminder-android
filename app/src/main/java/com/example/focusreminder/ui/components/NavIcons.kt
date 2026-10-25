@@ -360,3 +360,156 @@ fun ThemeToggleIcon(
         }
     }
 }
+
+/**
+ * Minimalist Vector Trash Can Icon for deleting reminders (Zero Emojis).
+ */
+@Composable
+fun TrashCanIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(16.dp)
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val strokeWidth = 1.6.dp.toPx()
+
+        // Lid horizontal bar
+        drawLine(
+            color = color,
+            start = Offset(w * 0.15f, h * 0.28f),
+            end = Offset(w * 0.85f, h * 0.28f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        // Handle on top of lid
+        val handlePath = Path().apply {
+            moveTo(w * 0.38f, h * 0.28f)
+            lineTo(w * 0.38f, h * 0.16f)
+            lineTo(w * 0.62f, h * 0.16f)
+            lineTo(w * 0.62f, h * 0.28f)
+        }
+        drawPath(
+            path = handlePath,
+            color = color,
+            style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        // Bin body
+        val binPath = Path().apply {
+            moveTo(w * 0.24f, h * 0.34f)
+            lineTo(w * 0.30f, h * 0.88f)
+            lineTo(w * 0.70f, h * 0.88f)
+            lineTo(w * 0.76f, h * 0.34f)
+        }
+        drawPath(
+            path = binPath,
+            color = color,
+            style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        // Interior vertical slats
+        drawLine(
+            color = color,
+            start = Offset(w * 0.42f, h * 0.44f),
+            end = Offset(w * 0.42f, h * 0.78f),
+            strokeWidth = strokeWidth * 0.85f,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.58f, h * 0.44f),
+            end = Offset(w * 0.58f, h * 0.78f),
+            strokeWidth = strokeWidth * 0.85f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+/**
+ * Minimalist Vector Clock Face Icon (Zero Emojis).
+ */
+@Composable
+fun ClockFaceIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(16.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 1.6.dp.toPx()
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val radius = (size.minDimension / 2f) - strokeWidth
+
+        drawCircle(
+            color = color,
+            center = Offset(cx, cy),
+            radius = radius,
+            style = Stroke(width = strokeWidth)
+        )
+        // Hour hand pointing to 10
+        drawLine(
+            color = color,
+            start = Offset(cx, cy),
+            end = Offset(cx - radius * 0.35f, cy - radius * 0.4f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        // Minute hand pointing to 2
+        drawLine(
+            color = color,
+            start = Offset(cx, cy),
+            end = Offset(cx + radius * 0.45f, cy - radius * 0.25f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+/**
+ * Minimalist Vector Calendar Icon (Zero Emojis).
+ */
+@Composable
+fun CalendarEventIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(16.dp)
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val strokeWidth = 1.6.dp.toPx()
+
+        // Calendar body
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w * 0.15f, h * 0.22f),
+            size = Size(w * 0.70f, h * 0.68f),
+            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+            style = Stroke(width = strokeWidth)
+        )
+
+        // Top binder pins
+        drawLine(
+            color = color,
+            start = Offset(w * 0.35f, h * 0.12f),
+            end = Offset(w * 0.35f, h * 0.26f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.65f, h * 0.12f),
+            end = Offset(w * 0.65f, h * 0.26f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+
+        // Header divider
+        drawLine(
+            color = color,
+            start = Offset(w * 0.15f, h * 0.42f),
+            end = Offset(w * 0.85f, h * 0.42f),
+            strokeWidth = strokeWidth * 0.8f,
+            cap = StrokeCap.Round
+        )
+    }
+}

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.focusreminder.platform.ReminderRepository
 import com.example.focusreminder.platform.ReminderScheduler
 import com.example.focusreminder.ui.reminder.StickyReminderActivity
 import java.text.SimpleDateFormat
@@ -39,17 +40,20 @@ class ReminderReceiver : BroadcastReceiver() {
             ACTION_ACKNOWLEDGE_REMINDER -> {
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 notificationManager.cancel(reminderId.toInt())
+                ReminderRepository.getInstance(context).markCompleted(reminderId)
             }
             ACTION_SNOOZE_REMINDER -> {
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 notificationManager.cancel(reminderId.toInt())
                 // Snooze for 10 minutes
+                val newTrigger = System.currentTimeMillis() + (10 * 60 * 1000L)
+                ReminderRepository.getInstance(context).updateReminderTriggerTime(reminderId, newTrigger)
                 ReminderScheduler.scheduleReminder(
                     context = context,
                     reminderId = reminderId,
                     title = title,
                     description = description,
-                    triggerAtMs = System.currentTimeMillis() + (10 * 60 * 1000L),
+                    triggerAtMs = newTrigger,
                     isP0 = isP0
                 )
             }

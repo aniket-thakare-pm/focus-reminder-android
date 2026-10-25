@@ -53,6 +53,7 @@ fun MainScreen(
                 when (tab) {
                     AppNavigationTab.TIMER -> DashboardScreen(
                         onNavigateToApps = { currentTab = AppNavigationTab.APPS },
+                        onNavigateToAlerts = { currentTab = AppNavigationTab.ALERTS },
                         onTestBlocker = {
                             val intent = BlockerActivity.createIntent(
                                 context = context,

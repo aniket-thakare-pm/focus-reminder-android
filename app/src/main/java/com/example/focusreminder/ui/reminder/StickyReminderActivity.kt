@@ -10,6 +10,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.focusreminder.platform.ReminderRepository
 import com.example.focusreminder.platform.ReminderScheduler
 import com.example.focusreminder.theme.FocusReminderTheme
 
@@ -74,18 +75,22 @@ class StickyReminderActivity : ComponentActivity() {
                         // Dismiss system notification
                         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                         notificationManager.cancel(reminderId.toInt())
+                        ReminderRepository.getInstance(this@StickyReminderActivity).markCompleted(reminderId)
 
                         Toast.makeText(this@StickyReminderActivity, "Reminder Acknowledged!", Toast.LENGTH_SHORT).show()
                         finish()
                     },
                     onSnooze = { snoozeMins ->
+                        val newTrigger = System.currentTimeMillis() + (snoozeMins * 60 * 1000L)
+                        ReminderRepository.getInstance(this@StickyReminderActivity).updateReminderTriggerTime(reminderId, newTrigger)
+
                         // Schedule snooze alarm
                         ReminderScheduler.scheduleReminder(
                             context = this@StickyReminderActivity,
                             reminderId = reminderId,
                             title = title,
                             description = description,
-                            triggerAtMs = System.currentTimeMillis() + (snoozeMins * 60 * 1000L),
+                            triggerAtMs = newTrigger,
                             isP0 = true
                         )
 

@@ -26,11 +26,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusreminder.platform.AppRestrictionRepository
 import com.example.focusreminder.platform.ForegroundAppDetector
+import com.example.focusreminder.platform.ReminderRepository
 import com.example.focusreminder.platform.UsagePermissionHelper
 import com.example.focusreminder.service.UsageMonitorService
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.*
+import com.example.focusreminder.ui.reminder.StickyReminderActivity
 import com.example.focusreminder.util.formatHoursMinutes
+import com.example.focusreminder.util.formatRelativeCountdown
+import com.example.focusreminder.util.formatReminderDateTime
+import com.example.focusreminder.util.formatTimeOfDay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -42,12 +47,16 @@ import kotlinx.coroutines.withContext
 @Composable
 fun DashboardScreen(
     onNavigateToApps: () -> Unit,
+    onNavigateToAlerts: () -> Unit = {},
     onTestBlocker: () -> Unit,
     onTestStickyReminder: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val repo = remember { AppRestrictionRepository.getInstance(context) }
+    val reminderRepo = remember { ReminderRepository.getInstance(context) }
+    val allReminders by reminderRepo.remindersFlow.collectAsState()
+    val nextP0Reminder = remember(allReminders) { reminderRepo.getNextUpcomingP0() }
     val updateKey by repo.restrictionsUpdateFlow.collectAsState()
     val detector = remember { ForegroundAppDetector(context) }
 
@@ -633,53 +642,113 @@ fun DashboardScreen(
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                if (nextP0Reminder != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "NEXT P0 STICKY ALERT",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            color = EmeraldDark,
+                            letterSpacing = 1.2.sp
+                        )
+                        Text(
+                            text = formatTimeOfDay(nextP0Reminder.triggerTimeMs),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+
                     Text(
-                        text = "NEXT P0 STICKY ALERT",
-                        fontSize = 9.sp,
+                        text = nextP0Reminder.title,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Black,
-                        color = EmeraldDark,
-                        letterSpacing = 1.2.sp
-                    )
-                    Text(
-                        text = "09:45 AM",
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
-                }
 
-                Text(
-                    text = "Prepare Sprint Demo Deck",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = TextPrimary
-                )
-
-                Text(
-                    text = "Demands deliberate acknowledgement • Full-screen sticky alert",
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-
-                // Debossed Action Button inside the Embossed Card
-                NeuInsetWell(
-                    modifier = Modifier.align(Alignment.End),
-                    cornerRadius = 12.dp,
-                    onClick = onTestStickyReminder
-                ) {
                     Text(
-                        text = "Preview Sticky Alert →",
+                        text = "${formatReminderDateTime(nextP0Reminder.triggerTimeMs)} (${formatRelativeCountdown(nextP0Reminder.triggerTimeMs)}) • Full-screen sticky alert",
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = EmeraldDark,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                        color = TextSecondary
                     )
+
+                    // Debossed Action Button inside the Embossed Card
+                    NeuInsetWell(
+                        modifier = Modifier.align(Alignment.End),
+                        cornerRadius = 12.dp,
+                        onClick = {
+                            val intent = StickyReminderActivity.createIntent(
+                                context = context,
+                                id = nextP0Reminder.id,
+                                title = nextP0Reminder.title,
+                                description = nextP0Reminder.description,
+                                time = formatTimeOfDay(nextP0Reminder.triggerTimeMs)
+                            )
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text(
+                            text = "Preview Sticky Alert →",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldDark,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "P0 STICKY ALERT",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TextMuted,
+                            letterSpacing = 1.2.sp
+                        )
+                        Text(
+                            text = "No Alert Set",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = TextMuted
+                        )
+                    }
+
+                    Text(
+                        text = "No Upcoming Sticky Alerts",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = TextPrimary
+                    )
+
+                    Text(
+                        text = "Schedule a high-attention full-screen takeover alert to break focus trance at an exact moment.",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
+
+                    // Debossed Action Button inside the Embossed Card
+                    NeuInsetWell(
+                        modifier = Modifier.align(Alignment.End),
+                        cornerRadius = 12.dp,
+                        onClick = onNavigateToAlerts
+                    ) {
+                        Text(
+                            text = "+ Schedule Alert →",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldDark,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                        )
+                    }
                 }
             }
         }

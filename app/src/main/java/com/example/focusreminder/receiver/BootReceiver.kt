@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.example.focusreminder.platform.ReminderRepository
 
 /**
  * Handles device boot completion (PRD Section 5.5 & Restart Policy Section 5.3).
@@ -24,7 +25,12 @@ class BootReceiver : BroadcastReceiver() {
             val overridePrefs = context.getSharedPreferences("emergency_override", Context.MODE_PRIVATE)
             overridePrefs.edit().clear().apply()
 
-            // Reminders will be rescheduled from local database here in Phase 4
+            // Reschedule all active reminders from persistence
+            try {
+                ReminderRepository.getInstance(context).rescheduleAllActiveAlarms(context)
+            } catch (e: Exception) {
+                Log.e("FocusReminder", "Failed to reschedule reminders after boot", e)
+            }
         }
     }
 }
