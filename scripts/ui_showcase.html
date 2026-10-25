@@ -15,10 +15,27 @@
   ============================================================================= */
   :root {
     --bg-neu: #E0E5EC;
+    --neu-surface: #E0E5EC;
+    --neu-surface-sunken: #D6DDE7;
     --neu-shadow-dark: #9BAAC0;
     --neu-shadow-light: #FFFFFF;
+    --neu-inner-dark: rgba(80, 98, 120, 0.40);
+    --neu-inner-light: rgba(255, 255, 255, 0.38);
     --neu-emerald: #059669;
     --neu-emerald-dark: #047857;
+  }
+
+  .dark-mode {
+    --bg-neu: #181C24 !important;
+    --neu-surface: #1E232C !important;
+    --neu-surface-sunken: #13161C !important;
+    --neu-shadow-dark: #090C11 !important;
+    --neu-shadow-light: rgba(255, 255, 255, 0.12) !important;
+    --neu-inner-dark: rgba(5, 7, 10, 0.75) !important;
+    --neu-inner-light: rgba(255, 255, 255, 0.08) !important;
+    --neu-emerald: #10B981 !important;
+    --neu-emerald-dark: #34D399 !important;
+    color: #F1F5F9 !important;
   }
 
   body {
@@ -28,45 +45,45 @@
 
   /* Raised Extruded Neumorphic Surfaces (Exact CSS) */
   .neu-card {
-    background-color: #E0E5EC;
+    background-color: var(--neu-surface);
     border-radius: 16px;
     box-shadow: 5px 5px 15px var(--neu-shadow-dark), -5px -5px 15px var(--neu-shadow-light);
   }
 
   .neu-card-sm {
-    background-color: #E0E5EC;
+    background-color: var(--neu-surface);
     border-radius: 12px;
     box-shadow: 4px 4px 10px var(--neu-shadow-dark), -4px -4px 10px var(--neu-shadow-light);
   }
 
   .neu-circle {
-    background-color: #E0E5EC;
+    background-color: var(--neu-surface);
     border-radius: 9999px;
     box-shadow: 5px 5px 15px var(--neu-shadow-dark), -5px -5px 15px var(--neu-shadow-light);
   }
 
-  /* Sunken Inset / Debossed Wells (Light from Top-Left: Inner shadow top & left; no fake white edge) */
+  /* Sunken Inset / Debossed Wells (Calibrated "In-Between" Depth) */
   .neu-inset {
-    background-color: #DCE2E9;
+    background-color: var(--neu-surface-sunken);
     border-radius: 16px;
-    box-shadow: inset 3px 3px 7px rgba(112, 128, 150, 0.35);
+    box-shadow: inset 4px 4px 8px var(--neu-inner-dark), inset -2px -2px 6px var(--neu-inner-light);
   }
 
   .neu-inset-sm {
-    background-color: #DCE2E9;
+    background-color: var(--neu-surface-sunken);
     border-radius: 12px;
-    box-shadow: inset 2px 2px 5px rgba(112, 128, 150, 0.32);
+    box-shadow: inset 3px 3px 6px var(--neu-inner-dark), inset -2px -2px 4px var(--neu-inner-light);
   }
 
   .neu-inset-circle {
-    background-color: #DCE2E9;
+    background-color: var(--neu-surface-sunken);
     border-radius: 9999px;
-    box-shadow: inset 4px 4px 10px rgba(112, 128, 150, 0.35);
+    box-shadow: inset 5px 5px 12px var(--neu-inner-dark), inset -3px -3px 8px var(--neu-inner-light);
   }
 
   /* Interactive Neumorphic Buttons */
   .neu-btn {
-    background-color: #E0E5EC;
+    background-color: var(--neu-surface);
     border-radius: 14px;
     box-shadow: 5px 5px 15px var(--neu-shadow-dark), -5px -5px 15px var(--neu-shadow-light);
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -146,8 +163,8 @@
     </div>
   </header>
 
-  <!-- PHONE CHASSIS (Neumorphic Off-White / Porcelain Surface #E0E5EC) -->
-  <div class="relative w-full max-w-[390px] h-[820px] bg-[#E0E5EC] rounded-[52px] shadow-[20px_20px_60px_#9baac0,-20px_-20px_60px_#ffffff] border-[6px] border-[#E0E5EC] overflow-hidden flex flex-col select-none">
+  <!-- PHONE CHASSIS (Dual-Mode Neumorphic Surface) -->
+  <div id="phone-frame" class="relative w-full max-w-[390px] h-[820px] bg-[var(--bg-neu)] rounded-[52px] shadow-[20px_20px_60px_var(--neu-shadow-dark),-20px_-20px_60px_var(--neu-shadow-light)] border-[6px] border-[var(--neu-surface)] overflow-hidden flex flex-col select-none transition-colors duration-300">
     
     <!-- STATUS BAR -->
     <div class="relative z-20 flex justify-between items-center px-6 pt-4 pb-1 text-slate-700 text-xs font-bold">
@@ -177,10 +194,15 @@
             <span class="text-[11px] font-extrabold uppercase tracking-widest text-emerald-700">Daily Attention Pacing</span>
             <h2 class="text-[28px] font-black text-slate-800 tracking-tight leading-none mt-0.5">Focus Dashboard</h2>
           </div>
-          <button onclick="switchTab('apps')" class="px-3.5 py-2 rounded-2xl neu-btn text-xs font-bold text-emerald-700 flex items-center gap-1.5 whitespace-nowrap flex-shrink-0">
-            <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
-            + Add App
-          </button>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleTheme()" title="Toggle Dark/Light Mode" class="w-9 h-9 rounded-2xl neu-btn text-xs font-bold text-slate-600 flex items-center justify-center flex-shrink-0">
+              <svg id="theme-icon" class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+            </button>
+            <button onclick="switchTab('apps')" class="px-3.5 py-2 rounded-2xl neu-btn text-xs font-bold text-emerald-700 flex items-center gap-1.5 whitespace-nowrap flex-shrink-0">
+              <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+              + Add App
+            </button>
+          </div>
         </div>
 
         <!-- HERO: DEBOSSED SUNKEN NEUMORPHIC TIMER DIAL (Modeled on Clock Reference) -->
@@ -725,6 +747,22 @@
       knob.addEventListener('touchstart', onStart);
       window.addEventListener('touchmove', onMove);
       window.addEventListener('touchend', onEnd);
+    }
+
+    function toggleTheme() {
+      const phone = document.getElementById('phone-frame');
+      phone.classList.toggle('dark-mode');
+      const isDark = phone.classList.contains('dark-mode');
+      const icon = document.getElementById('theme-icon');
+      if (isDark) {
+        icon.innerHTML = '<circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+        icon.classList.remove('text-amber-500');
+        icon.classList.add('text-amber-400');
+      } else {
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>';
+        icon.classList.remove('text-amber-400');
+        icon.classList.add('text-amber-500');
+      }
     }
   </script>
 </body>

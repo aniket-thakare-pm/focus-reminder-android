@@ -99,22 +99,45 @@ fun DashboardScreen(
                     letterSpacing = (-0.8).sp
                 )
             }
-            NeuPill(
-                modifier = Modifier.padding(2.dp),
-                onClick = onNavigateToApps
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Theme Toggle Pill (Dark Obsidian / Light Porcelain Soft UI)
+                NeuPill(
+                    onClick = { ThemeManager.toggleTheme() },
+                    cornerRadius = 14.dp,
+                    elevation = 4.dp
                 ) {
-                    Box(modifier = Modifier.size(6.dp).background(EmeraldPrimary, CircleShape))
-                    Text(
-                        text = "+ Add App",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = EmeraldDark
-                    )
+                    Box(
+                        modifier = Modifier.size(38.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ThemeToggleIcon(
+                            isDark = ThemeManager.isDarkTheme,
+                            color = if (ThemeManager.isDarkTheme) Color(0xFFFBBF24) else TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                NeuPill(
+                    modifier = Modifier.padding(2.dp),
+                    onClick = onNavigateToApps
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(modifier = Modifier.size(6.dp).background(EmeraldPrimary, CircleShape))
+                        Text(
+                            text = "+ Add App",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldDark
+                        )
+                    }
                 }
             }
         }
@@ -230,17 +253,19 @@ fun DashboardScreen(
                         modifier = Modifier.size(200.dp),
                         isInset = true
                     ) {
+                        val trackColor = NeuSunkenTrack
+                        val primaryColor = EmeraldPrimary
                         // Emerald Progress Arc inside the well
                         Canvas(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                             // Indented Track
                             drawCircle(
-                                color = NeuSunkenTrack,
+                                color = trackColor,
                                 radius = size.minDimension / 2.3f,
                                 style = Stroke(width = 8.dp.toPx())
                             )
                             // Active Emerald Arc
                             drawArc(
-                                color = EmeraldPrimary,
+                                color = primaryColor,
                                 startAngle = -90f,
                                 sweepAngle = 230f,
                                 useCenter = false,

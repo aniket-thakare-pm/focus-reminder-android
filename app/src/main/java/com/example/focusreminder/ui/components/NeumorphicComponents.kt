@@ -51,25 +51,8 @@ import kotlinx.coroutines.launch
 // ============================================================
 // Neumorphic (Soft UI) Components & Surfaces
 // Specs: border-radius 14-16dp, box-shadow -5px -5px 15px, 5px 5px 15px
-// Solid #E0E5EC base surface (NO random gradients)
+// Dual Mode: Light Porcelain & Dark Obsidian Soft UI
 // ============================================================
-
-val NeuBevelBorder = Brush.linearGradient(
-    colors = listOf(
-        Color(0x90FFFFFF), // Top-left light reflection
-        Color(0x209BAAC0)  // Bottom-right subtle edge
-    )
-)
-
-val NeuInsetBevelBorder = Brush.linearGradient(
-    colors = listOf(
-        Color(0x22708096), // Subtle soft dark crease at top-left edge
-        Color(0x06708096),
-        Color.Transparent  // Bottom-right is completely transparent (ZERO white border)
-    ),
-    start = androidx.compose.ui.geometry.Offset(0f, 0f),
-    end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-)
 
 /**
  * Extruded Neumorphic Card with clean dual-directional shadows
@@ -85,6 +68,7 @@ fun NeuCard(
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val neu = LocalNeuColors.current
     val shape = RoundedCornerShape(cornerRadius)
 
     val shadowModifier = modifier.drawBehind {
@@ -94,9 +78,9 @@ fun NeuCard(
 
         drawIntoCanvas { canvas ->
             if (!isInset) {
-                // Top-left white highlight shadow (-5px -5px 15px #FFFFFF)
+                // Top-left light shadow (-offsetPx, -offsetPx)
                 val paintLight = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.White.toArgb()
+                    color = neu.shadowLight.toArgb()
                     maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
                 }
                 canvas.nativeCanvas.drawRoundRect(
@@ -104,9 +88,9 @@ fun NeuCard(
                     r, r, paintLight
                 )
 
-                // Bottom-right dark shadow (5px 5px 15px #9BAAC0)
+                // Bottom-right dark shadow (+offsetPx, +offsetPx)
                 val paintDark = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color(0x667D8FA6).toArgb()
+                    color = neu.shadowDark.toArgb()
                     maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
                 }
                 canvas.nativeCanvas.drawRoundRect(
@@ -120,11 +104,11 @@ fun NeuCard(
     var baseModifier = shadowModifier
         .clip(shape)
         .background(
-            if (isInset) Color(0xFFDCE2E9) else (backgroundColor ?: NeuSurface)
+            if (isInset) neu.surfaceSunken else (backgroundColor ?: neu.surface)
         )
         .border(
-            width = 0.8.dp,
-            brush = borderColor?.let { Brush.linearGradient(listOf(it, it)) } ?: (if (isInset) NeuInsetBevelBorder else NeuBevelBorder),
+            width = 0.9.dp,
+            brush = borderColor?.let { Brush.linearGradient(listOf(it, it)) } ?: (if (isInset) neu.insetBevelBorder else neu.bevelBorder),
             shape = shape
         )
 
@@ -163,24 +147,22 @@ fun NeuPill(
 }
 
 /**
- * Sunken Debossed Inset Well with natural directional lighting.
- * Light source: Fixed at Top-Left.
- * - Soft inner shadows along Top and Left edges.
- * - Clean porcelain tone (never dirty gray).
- * - ZERO stark white borders or highlights on bottom/right (eliminates fake embossing).
+ * Sunken Debossed Inset Well with calibrated "In-Between" depth.
+ * Directional Top-Left lighting, 7dp depth, and ambient floor bounce.
  */
 @Composable
 fun NeuInsetWell(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 14.dp,
-    shadowDepth: Dp = 3.5.dp,
+    shadowDepth: Dp = 7.dp, // Calibrated "In-Between" depth
     backgroundColor: Color? = null,
     borderColor: Color? = null,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val neu = LocalNeuColors.current
     val shape = RoundedCornerShape(cornerRadius)
-    val baseBg = backgroundColor ?: Color(0xFFDCE2E9)
+    val baseBg = backgroundColor ?: neu.surfaceSunken
 
     var boxModifier = modifier
         .clip(shape)
@@ -188,15 +170,14 @@ fun NeuInsetWell(
         .drawBehind {
             val w = size.width
             val h = size.height
-            // Constrain shadow depth so smaller pills (like metrics or lock icon) retain clean porcelain interiors
-            val depth = shadowDepth.toPx().coerceAtMost(h / 3.5f).coerceAtMost(w / 3.5f)
+            val depth = shadowDepth.toPx().coerceAtMost(h / 2.5f).coerceAtMost(w / 2.5f)
 
-            // 1. Top inner shadow (light from top-left blocked by top rim -> soft shadow downward)
+            // 1. Top inner shadow (sinks downward from top lip)
             drawRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0x2C708096),
-                        Color(0x0E708096),
+                        neu.innerShadowTop,
+                        neu.innerShadowTop.copy(alpha = neu.innerShadowTop.alpha * 0.45f),
                         Color.Transparent
                     ),
                     startY = 0f,
@@ -205,12 +186,12 @@ fun NeuInsetWell(
                 size = size
             )
 
-            // 2. Left inner shadow (light from top-left blocked by left rim -> soft shadow rightward)
+            // 2. Left inner shadow (sinks rightward from left lip)
             drawRect(
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0x2C708096),
-                        Color(0x0E708096),
+                        neu.innerShadowTop,
+                        neu.innerShadowTop.copy(alpha = neu.innerShadowTop.alpha * 0.45f),
                         Color.Transparent
                     ),
                     startX = 0f,
@@ -218,10 +199,38 @@ fun NeuInsetWell(
                 ),
                 size = size
             )
+
+            // 3. Bottom inner reflection (ambient light bounces onto inner floor)
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        neu.innerShadowBottom.copy(alpha = neu.innerShadowBottom.alpha * 0.4f),
+                        neu.innerShadowBottom
+                    ),
+                    startY = (h - depth * 0.75f).coerceAtLeast(0f),
+                    endY = h
+                ),
+                size = size
+            )
+
+            // 4. Right inner reflection (ambient light bounces onto inner right floor)
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        neu.innerShadowBottom.copy(alpha = neu.innerShadowBottom.alpha * 0.4f),
+                        neu.innerShadowBottom
+                    ),
+                    startX = (w - depth * 0.75f).coerceAtLeast(0f),
+                    endX = w
+                ),
+                size = size
+            )
         }
         .border(
-            width = 0.8.dp,
-            brush = borderColor?.let { Brush.linearGradient(listOf(it, it)) } ?: NeuInsetBevelBorder,
+            width = 0.9.dp,
+            brush = borderColor?.let { Brush.linearGradient(listOf(it, it)) } ?: neu.insetBevelBorder,
             shape = shape
         )
 
@@ -434,6 +443,7 @@ fun NeuCircle(
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val neu = LocalNeuColors.current
     val shadowModifier = modifier.drawBehind {
         val blurPx = (elevation.toPx() * 2.5f).coerceAtLeast(1f)
         val offsetPx = elevation.toPx()
@@ -442,24 +452,24 @@ fun NeuCircle(
             val r = size.minDimension / 2f
             val cx = size.width / 2f
             val cy = size.height / 2f
-            val shadowPx = 8.dp.toPx()
+            val shadowPx = 10.dp.toPx()
 
-            // Directional Top-Left inner shadow (consistent light from top-left)
+            // Directional Top-Left inner shadow
             drawCircle(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0x2E708096),
-                        Color(0x0C708096),
+                        neu.innerShadowTop,
+                        neu.innerShadowTop.copy(alpha = neu.innerShadowTop.alpha * 0.45f),
                         Color.Transparent
                     ),
                     start = androidx.compose.ui.geometry.Offset(cx - r, cy - r),
-                    end = androidx.compose.ui.geometry.Offset(cx - r + shadowPx * 2f, cy - r + shadowPx * 2f)
+                    end = androidx.compose.ui.geometry.Offset(cx - r + shadowPx * 2.2f, cy - r + shadowPx * 2.2f)
                 )
             )
         } else {
             drawIntoCanvas { canvas ->
                 val paintLight = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.White.toArgb()
+                    color = neu.shadowLight.toArgb()
                     maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
                 }
                 canvas.nativeCanvas.drawCircle(
@@ -468,7 +478,7 @@ fun NeuCircle(
                 )
 
                 val paintDark = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color(0x667D8FA6).toArgb()
+                    color = neu.shadowDark.toArgb()
                     maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
                 }
                 canvas.nativeCanvas.drawCircle(
@@ -481,8 +491,8 @@ fun NeuCircle(
 
     var baseModifier = shadowModifier
         .clip(CircleShape)
-        .background(if (isInset) Color(0xFFDCE2E9) else NeuSurface)
-        .border(width = 0.8.dp, brush = if (isInset) NeuInsetBevelBorder else NeuBevelBorder, shape = CircleShape)
+        .background(if (isInset) neu.surfaceSunken else neu.surface)
+        .border(width = 0.9.dp, brush = if (isInset) neu.insetBevelBorder else neu.bevelBorder, shape = CircleShape)
 
     if (onClick != null) {
         baseModifier = baseModifier.clickable(onClick = onClick)

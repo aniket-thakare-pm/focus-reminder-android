@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 
@@ -289,5 +290,73 @@ fun SearchVectorIcon(
             strokeWidth = strokeWidth * 1.2f,
             cap = StrokeCap.Round
         )
+    }
+}
+
+/**
+ * Minimalist Vector Theme Toggle Icon (Sun / Crescent Moon, Zero Emojis).
+ */
+@Composable
+fun ThemeToggleIcon(
+    isDark: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier.size(18.dp)
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2f
+        val cy = h / 2f
+        val strokeWidth = 1.6.dp.toPx()
+
+        if (isDark) {
+            // Sun icon (click to switch to light)
+            val sunRadius = size.minDimension * 0.22f
+            drawCircle(
+                color = color,
+                center = Offset(cx, cy),
+                radius = sunRadius,
+                style = Stroke(width = strokeWidth)
+            )
+            // 8 delicate sun rays
+            val rayInner = sunRadius + 2.dp.toPx()
+            val rayOuter = sunRadius + 4.5.dp.toPx()
+            for (i in 0 until 8) {
+                val angle = (i * 45.0) * (Math.PI / 180.0)
+                val x1 = cx + (rayInner * Math.cos(angle)).toFloat()
+                val y1 = cy + (rayInner * Math.sin(angle)).toFloat()
+                val x2 = cx + (rayOuter * Math.cos(angle)).toFloat()
+                val y2 = cy + (rayOuter * Math.sin(angle)).toFloat()
+                drawLine(
+                    color = color,
+                    start = Offset(x1, y1),
+                    end = Offset(x2, y2),
+                    strokeWidth = strokeWidth * 0.9f,
+                    cap = StrokeCap.Round
+                )
+            }
+        } else {
+            // Crescent Moon icon (click to switch to dark)
+            val moonPath = Path().apply {
+                val r = size.minDimension * 0.38f
+                moveTo(cx - r * 0.2f, cy - r)
+                cubicTo(
+                    cx + r * 0.9f, cy - r * 0.75f,
+                    cx + r * 0.9f, cy + r * 0.75f,
+                    cx - r * 0.2f, cy + r
+                )
+                cubicTo(
+                    cx + r * 0.32f, cy + r * 0.5f,
+                    cx + r * 0.32f, cy - r * 0.5f,
+                    cx - r * 0.2f, cy - r
+                )
+                close()
+            }
+            drawPath(
+                path = moonPath,
+                color = color,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+        }
     }
 }

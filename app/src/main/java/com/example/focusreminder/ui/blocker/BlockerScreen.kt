@@ -114,16 +114,18 @@ fun BlockerScreen(
                     modifier = Modifier.size(240.dp),
                     isInset = true
                 ) {
+                    val trackColor = NeuSunkenTrack
+                    val primaryColor = EmeraldPrimary
                     // Background Indented Track
                     Canvas(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                         drawCircle(
-                            color = NeuSunkenTrack,
+                            color = trackColor,
                             radius = size.minDimension / 2.3f,
                             style = Stroke(width = 10.dp.toPx())
                         )
                         val progress = (secondsLeft.toFloat() / remainingCooldownSeconds.coerceAtLeast(1L)).coerceIn(0f, 1f)
                         drawArc(
-                            color = EmeraldPrimary,
+                            color = primaryColor,
                             startAngle = -90f,
                             sweepAngle = 360f * progress,
                             useCenter = false,
