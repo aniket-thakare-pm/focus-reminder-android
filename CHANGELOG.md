@@ -1,11 +1,18 @@
 # Focus & Reminder — Version Changelog
 
-### v1.5.1 (Current) — 2026-10-25
-* **Type:** Patch / OEM Status Bar Capsule Enhancement
+### v1.5.2 (Current) — 2026-10-25
+* **Type:** Patch / Fix
 * **Summary:**
-  - **Live Floating Status Bar Capsule (Overlay):** Added native `FloatingTimerOverlay` rendering a live ticking purple countdown pill (`⏱ MM:SS`) directly in the status bar area next to the clock. Ticks every second, is smoothly draggable, and automatically dismisses when the session ends or app closes.
-  - **Status Bar Notification Fix:** Upgraded chronometer channel from `IMPORTANCE_LOW` (which hid the notification from the status bar on OEM ROMs) to `IMPORTANCE_HIGH`, added `CATEGORY_STOPWATCH`, `setShowBadge(true)`, and `EXTRA_REQUEST_PROMOTED_ONGOING`.
-  - **Dedicated Vector Asset:** Added `ic_stat_timer.xml` crisp stopwatch icon for status bar notification and floating capsule.
+  - **Removed Screen Overlay:** Completely eradicated intrusive status bar window overlay that collided with status bar icons.
+  - **Instant Dismissal On App Close:** As soon as the user closes or leaves Instagram, the timer notification is immediately dismissed from the notification shade and status bar. No lingering notifications on home screen or in other apps.
+  - **Pause & Resume with Grace Period:** When leaving Instagram, remaining session time is paused and banked. Returning within the 5-minute grace period smoothly resumes the timer from where it stopped. Away for > 5 minutes cleanly expires the session.
+
+### v1.5.1 — 2026-10-25
+* **Commit:** `9d158bd`
+* **Type:** Patch / Status Bar Channel Fix
+* **Summary:**
+  - **Status Bar Notification Fix:** Upgraded chronometer channel to `IMPORTANCE_HIGH`, added `CATEGORY_STOPWATCH`, `setShowBadge(true)`, and `EXTRA_REQUEST_PROMOTED_ONGOING`.
+  - **Dedicated Vector Asset:** Added `ic_stat_timer.xml` crisp stopwatch icon for status bar notification.
 
 ### v1.5.0 — 2026-10-25
 * **Commit:** `095cb49`

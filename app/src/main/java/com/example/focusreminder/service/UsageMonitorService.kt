@@ -14,7 +14,6 @@ import com.example.focusreminder.platform.AppRestrictionRepository
 import com.example.focusreminder.platform.ForegroundAppDetector
 import com.example.focusreminder.platform.UsagePermissionHelper
 import com.example.focusreminder.ui.blocker.BlockerActivity
-import com.example.focusreminder.ui.overlay.FloatingTimerOverlay
 import com.example.focusreminder.ui.session.SessionContractActivity
 import kotlinx.coroutines.*
 import java.util.Calendar
@@ -106,19 +105,19 @@ class UsageMonitorService : ComponentActivityService() {
     private var activeSessionAppName: String? = null
     private var activeSessionEndTimeMs: Long = 0L
     private var activeCooldownMinutes: Int = 30
+    private var remainingSessionMs: Long = 0L
+    private var isSessionPaused: Boolean = false
+    private var sessionPausedAtMs: Long = 0L
     private var hasFiredTwoMinWarning: Boolean = false
     private var lastSeenActiveTimeMs: Long = 0L
 
     private var lastContractPackage: String? = null
     private var lastContractTimeMs: Long = 0L
 
-    private var floatingTimerOverlay: FloatingTimerOverlay? = null
-
     override fun onCreate() {
         super.onCreate()
         detector = ForegroundAppDetector(this)
         repo = AppRestrictionRepository.getInstance(this)
-        floatingTimerOverlay = FloatingTimerOverlay(this)
         createNotificationChannels()
     }
 
@@ -138,13 +137,15 @@ class UsageMonitorService : ComponentActivityService() {
                     val now = System.currentTimeMillis()
                     activeSessionPackage = pkg
                     activeSessionAppName = name
-                    activeSessionEndTimeMs = now + (sessionMins * 60 * 1000L)
+                    remainingSessionMs = sessionMins * 60 * 1000L
+                    activeSessionEndTimeMs = now + remainingSessionMs
                     activeCooldownMinutes = cooldownMins
+                    isSessionPaused = false
+                    sessionPausedAtMs = 0L
                     hasFiredTwoMinWarning = false
                     lastSeenActiveTimeMs = now
 
                     showLiveChronometerNotification(name, activeSessionEndTimeMs)
-                    floatingTimerOverlay?.show(name, activeSessionEndTimeMs)
                 }
 
                 startForeground(NOTIFICATION_ID, buildForegroundNotification())
@@ -185,27 +186,33 @@ class UsageMonitorService : ComponentActivityService() {
                     if (currentApp == activePkg) {
                         lastSeenActiveTimeMs = now
 
-                        // Ensure floating timer overlay is active in status bar during session
-                        if (floatingTimerOverlay?.isShowing == false) {
-                            floatingTimerOverlay?.show(activeSessionAppName ?: "App", activeSessionEndTimeMs)
+                        // If returning from temporary pause, resume session timer!
+                        if (isSessionPaused) {
+                            isSessionPaused = false
+                            activeSessionEndTimeMs = now + remainingSessionMs
+                            showLiveChronometerNotification(activeSessionAppName ?: "App", activeSessionEndTimeMs)
+                        } else {
+                            remainingSessionMs = maxOf(0L, activeSessionEndTimeMs - now)
                         }
 
                         // Check 2-Minute Warning Alert
-                        if (!hasFiredTwoMinWarning && (activeSessionEndTimeMs - now) <= (2 * 60 * 1000L) && (activeSessionEndTimeMs - now) > 0L) {
+                        if (!hasFiredTwoMinWarning && remainingSessionMs <= (2 * 60 * 1000L) && remainingSessionMs > 0L) {
                             hasFiredTwoMinWarning = true
                             showTwoMinuteWarningNotification(activeSessionAppName ?: "App")
                         }
 
                         // Check Session Expiration (Hard Stop!)
-                        if (now >= activeSessionEndTimeMs) {
+                        if (now >= activeSessionEndTimeMs || remainingSessionMs <= 0L) {
                             val appLabel = activeSessionAppName ?: activePkg.substringAfterLast(".")
                             val cooldownMin = activeCooldownMinutes
 
                             // Enforce cooldown lock
                             repo.lockApp(activePkg, appLabel, durationMinutes = cooldownMin)
 
-                            // Clear active session
+                            // Clear active session immediately
                             activeSessionPackage = null
+                            remainingSessionMs = 0L
+                            isSessionPaused = false
                             dismissChronometerNotification()
 
                             lastBlockedPackage = activePkg
@@ -214,11 +221,22 @@ class UsageMonitorService : ComponentActivityService() {
                             continue
                         }
                     } else {
-                        // User switched out or locked screen. Check 5-minute session grace period.
-                        if ((now - lastSeenActiveTimeMs) > (5 * 60 * 1000L)) {
-                            // User abandoned session for > 5 mins: close session cleanly
-                            activeSessionPackage = null
+                        // User closed or switched away from the restricted app!
+                        if (!isSessionPaused) {
+                            // Pause the session immediately and DISMISS the timer notification from the notification bar!
+                            isSessionPaused = true
+                            sessionPausedAtMs = now
+                            remainingSessionMs = maxOf(0L, activeSessionEndTimeMs - now)
                             dismissChronometerNotification()
+                        } else {
+                            // Already paused: check 5-minute session continuity grace period
+                            if ((now - sessionPausedAtMs) > (5 * 60 * 1000L)) {
+                                // User stayed away for > 5 mins: cleanly expire the session
+                                activeSessionPackage = null
+                                remainingSessionMs = 0L
+                                isSessionPaused = false
+                                dismissChronometerNotification()
+                            }
                         }
                     }
                 }
@@ -352,7 +370,6 @@ class UsageMonitorService : ComponentActivityService() {
     private fun dismissChronometerNotification() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(CHRONOMETER_NOTIFICATION_ID)
-        floatingTimerOverlay?.dismiss()
     }
 
     private fun triggerBlocker(

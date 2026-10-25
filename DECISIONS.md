@@ -123,11 +123,12 @@
 
 ---
 
-## ADR-010: OEM Status Bar Floating Capsule & Chronometer Fix
+## ADR-010: Notification Bar Chronometer & Session Pause Lifecycle
 
-- **Context:** OEM ROMs (OxygenOS, ColorOS, HyperOS) have proprietary status bar capsules (Fluid Cloud / Live Alerts) that hardcode system apps (like the built-in Clock) and block 3rd-party apps from injecting into the status bar clock slot. Furthermore, `IMPORTANCE_LOW` notifications are completely hidden from the status bar.
+- **Context:** An experimental floating overlay collided with status bar notification icons and was rejected. Furthermore, timer notifications continued running in the background even after closing the restricted app or the main app.
 - **Decision:**
-  1. **Status Bar Notification Fix:** Upgrade chronometer notification channel to `IMPORTANCE_HIGH`, assign `CATEGORY_STOPWATCH`, add `ic_stat_timer.xml` vector icon, and set `EXTRA_REQUEST_PROMOTED_ONGOING` so the notification surfaces in the status bar and drawer.
-  2. **Floating Status Bar Capsule Overlay (`FloatingTimerOverlay`):** Use `SYSTEM_ALERT_WINDOW` to display a native, live-ticking purple/indigo capsule pill (`⏱ MM:SS`) docked directly in the status bar area next to the clock. Ticks every second, is smoothly draggable, and automatically dismisses when the session ends or app closes.
-- **Rationale:** Ensures 100% parity with OEM system timer pills (like OxygenOS Fluid Cloud) across all devices, even when the manufacturer blocks 3rd-party status bar APIs.
-- **Consequences:** Created `FloatingTimerOverlay`, updated `UsageMonitorService` to show/hide the overlay during active sessions, and bumped release to `v1.5.1`.
+  1. **Strict Zero-Overlay Rule:** Eradicate all window overlay hacks (`TYPE_APPLICATION_OVERLAY`) for status bar timers. No visual elements may collide with or obscure native system notification icons.
+  2. **Instant Dismissal on Exit:** The moment the user presses Home or leaves the restricted app (`currentApp != activePkg`), the timer notification is immediately dismissed from the notification shade and status bar.
+  3. **Banked Time & Grace Period:** When the user leaves, remaining time is paused and banked (`remainingSessionMs = maxOf(0L, activeSessionEndTimeMs - now)`). If they re-enter within the 5-minute grace period, the session resumes smoothly with exact remaining time. If they stay away for > 5 minutes, the session cleanly expires.
+- **Rationale:** Prevents UI clutter, respects native Android system bars, and guarantees accurate session time accounting without phantom background countdowns.
+- **Consequences:** Deleted `FloatingTimerOverlay.kt`, implemented pause/resume state machine in `UsageMonitorService`, and bumped release to `v1.5.2`.
