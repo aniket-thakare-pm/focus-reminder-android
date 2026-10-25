@@ -26,7 +26,7 @@ class UsageMonitorService : ComponentActivityService() {
     companion object {
         const val CHANNEL_ID = "focus_monitor_service_channel"
         const val BLOCKER_CHANNEL_ID = "focus_blocker_urgent_channel"
-        const val CHRONOMETER_CHANNEL_ID = "focus_session_chronometer_channel_v2"
+        const val CHRONOMETER_CHANNEL_ID = "focus_sticky_timer_channel_v3"
         const val WARNING_CHANNEL_ID = "focus_session_warning_channel"
 
         const val NOTIFICATION_ID = 9001
@@ -145,7 +145,7 @@ class UsageMonitorService : ComponentActivityService() {
                     hasFiredTwoMinWarning = false
                     lastSeenActiveTimeMs = now
 
-                    showLiveChronometerNotification(name, activeSessionEndTimeMs)
+                    showLiveChronometerNotification(name, activeSessionEndTimeMs, remainingSessionMs)
                 }
 
                 startForeground(NOTIFICATION_ID, buildForegroundNotification())
@@ -190,10 +190,12 @@ class UsageMonitorService : ComponentActivityService() {
                         if (isSessionPaused) {
                             isSessionPaused = false
                             activeSessionEndTimeMs = now + remainingSessionMs
-                            showLiveChronometerNotification(activeSessionAppName ?: "App", activeSessionEndTimeMs)
                         } else {
                             remainingSessionMs = maxOf(0L, activeSessionEndTimeMs - now)
                         }
+
+                        // Continuously maintain the sticky notification with live time while in the app!
+                        showLiveChronometerNotification(activeSessionAppName ?: "App", activeSessionEndTimeMs, remainingSessionMs)
 
                         // Check 2-Minute Warning Alert
                         if (!hasFiredTwoMinWarning && remainingSessionMs <= (2 * 60 * 1000L) && remainingSessionMs > 0L) {
@@ -322,7 +324,7 @@ class UsageMonitorService : ComponentActivityService() {
         }
     }
 
-    private fun showLiveChronometerNotification(appName: String, endTimeMs: Long) {
+    private fun showLiveChronometerNotification(appName: String, endTimeMs: Long, remainingMs: Long) {
         val launchIntent = packageManager.getLaunchIntentForPackage(activeSessionPackage ?: "")
         val contentPendingIntent = launchIntent?.let {
             PendingIntent.getActivity(
@@ -333,17 +335,25 @@ class UsageMonitorService : ComponentActivityService() {
             )
         }
 
+        val totalSecs = maxOf(0L, remainingMs / 1000L)
+        val mins = totalSecs / 60L
+        val secs = totalSecs % 60L
+        val timeStr = String.format(java.util.Locale.US, "%02d:%02d", mins, secs)
+
         val builder = NotificationCompat.Builder(this, CHRONOMETER_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_timer)
-            .setContentTitle("$appName Focus Session")
-            .setContentText("Focus session ticking • Live countdown active")
+            .setContentTitle("$appName Focus Session: $timeStr")
+            .setContentText("⏱ $timeStr remaining • Wrap up before cooldown")
+            .setSubText("Active Session")
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
             .setWhen(endTimeMs)
             .setShowWhen(true)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setColor(android.graphics.Color.parseColor("#4F46E5")) // Vibrant Indigo/Purple
             .setContentIntent(contentPendingIntent)
 
@@ -480,19 +490,18 @@ class UsageMonitorService : ComponentActivityService() {
 
             try {
                 manager.deleteNotificationChannel("focus_session_chronometer_channel")
+                manager.deleteNotificationChannel("focus_session_chronometer_channel_v2")
             } catch (e: Exception) {
                 // Ignore
             }
 
             val chronometerChannel = NotificationChannel(
                 CHRONOMETER_CHANNEL_ID,
-                "Live Focus Session Chronometer",
+                "Active Focus Session Timer",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Live countdown timer during active app focus sessions"
+                description = "Shows continuous countdown timer during active focus sessions"
                 setShowBadge(true)
-                setSound(null, null)
-                enableVibration(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
 

@@ -1,6 +1,15 @@
 # Focus & Reminder — Version Changelog
 
-### v1.5.2 (Current) — 2026-10-25
+### v1.5.3 (Current) — 2026-10-25
+* **Type:** Patch / Continuous Sticky Timer Notification
+* **Summary:**
+  - **Dual-Rendering Continuous Timer:** In addition to the native Android chronometer in the header, the exact remaining digital countdown (`09:48`, `09:47`...) is dynamically rendered directly in the notification title and content body so it is universally visible across all OEM skins (OxygenOS, ColorOS, OneUI).
+  - **Sticky & Non-Intrusive:** Marked with `setOngoing(true)` and `setOnlyAlertOnce(true)` so it stays pinned without repeated buzzes or sound.
+  - **Clean Channel v3:** Upgraded to `focus_sticky_timer_channel_v3` with default alert importance, ensuring OxygenOS does not treat it as a silent hidden notification.
+  - **Instant Exit Dismissal & Re-Entry Resume:** The notification disappears the instant Instagram is closed or left, and re-appears immediately with exact banked time upon returning within the 5-minute grace period.
+
+### v1.5.2 — 2026-10-25
+* **Commit:** `80b0948`
 * **Type:** Patch / Fix
 * **Summary:**
   - **Removed Screen Overlay:** Completely eradicated intrusive status bar window overlay that collided with status bar icons.
