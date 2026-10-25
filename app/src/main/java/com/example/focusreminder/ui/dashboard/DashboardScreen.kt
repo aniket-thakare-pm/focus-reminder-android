@@ -25,10 +25,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusreminder.platform.AppRestrictionRepository
+import com.example.focusreminder.platform.ForegroundAppDetector
 import com.example.focusreminder.platform.UsagePermissionHelper
 import com.example.focusreminder.service.UsageMonitorService
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 /**
  * Main Application Dashboard featuring a Neumorphic Sunken Dial & Tactile Soft UI Cards.
@@ -43,6 +48,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     val repo = remember { AppRestrictionRepository.getInstance(context) }
     val updateKey by repo.restrictionsUpdateFlow.collectAsState()
+    val detector = remember { ForegroundAppDetector(context) }
 
     var hasUsagePermission by remember { mutableStateOf(UsagePermissionHelper.hasUsageAccessPermission(context)) }
     var hasOverlayPermission by remember { mutableStateOf(UsagePermissionHelper.hasOverlayPermission(context)) }
@@ -52,6 +58,59 @@ fun DashboardScreen(
         if (hasUsagePermission && hasOverlayPermission) {
             UsageMonitorService.start(context)
         }
+    }
+
+    val restrictedPackages = remember(updateKey) { repo.getRestrictedPackages().toList() }
+
+    // Real live app usage & device screen time from UsageStatsManager
+    var actualAppUsageMap by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var totalDeviceScreenTimeMin by remember { mutableStateOf(0) }
+
+    // Continuous live refresh every 3 seconds from OS UsageStatsManager
+    LaunchedEffect(hasUsagePermission, updateKey, restrictedPackages) {
+        while (isActive) {
+            val usageGranted = UsagePermissionHelper.hasUsageAccessPermission(context)
+            val overlayGranted = UsagePermissionHelper.hasOverlayPermission(context)
+            hasUsagePermission = usageGranted
+            hasOverlayPermission = overlayGranted
+
+            if (usageGranted) {
+                withContext(Dispatchers.IO) {
+                    val usageMap = detector.getDailyUsageMinutesMap(restrictedPackages)
+                    val deviceTotal = detector.getTotalScreenTimeTodayMinutes()
+                    withContext(Dispatchers.Main) {
+                        actualAppUsageMap = usageMap
+                        totalDeviceScreenTimeMin = deviceTotal
+                    }
+                }
+            }
+            delay(3000L)
+        }
+    }
+
+    // Hero timer calculations
+    val (heroUsedMin, heroBudgetMin) = remember(restrictedPackages, actualAppUsageMap, totalDeviceScreenTimeMin) {
+        if (restrictedPackages.isNotEmpty()) {
+            val totalBudget = restrictedPackages.sumOf { repo.getDailyLimitMinutes(it) }.coerceAtLeast(1)
+            val totalUsed = restrictedPackages.sumOf { actualAppUsageMap[it] ?: 0 }
+            Pair(totalUsed, totalBudget)
+        } else {
+            // Default when no restricted apps: device screen time vs 2h 00m target
+            Pair(totalDeviceScreenTimeMin, 120)
+        }
+    }
+
+    val heroRemainingMin = maxOf(0, heroBudgetMin - heroUsedMin)
+    val heroFractionLeft = (heroRemainingMin.toFloat() / heroBudgetMin.toFloat()).coerceIn(0f, 1f)
+    val heroSweepAngle = (360f * heroFractionLeft).coerceIn(4f, 360f)
+    val heroRemainingHours = heroRemainingMin / 60
+    val heroRemainingRemainderMin = heroRemainingMin % 60
+    val heroTimeDisplay = String.format("%02d:%02d", heroRemainingHours, heroRemainingRemainderMin)
+    val heroArcColor = when {
+        heroRemainingMin == 0 -> ErrorRed
+        heroFractionLeft <= 0.20f -> ErrorRed
+        heroFractionLeft <= 0.40f -> Color(0xFFD97706)
+        else -> EmeraldPrimary
     }
 
     // Gentle pulse animation for the central puck
@@ -65,8 +124,6 @@ fun DashboardScreen(
         ),
         label = "pulse"
     )
-
-    val restrictedPackages = remember(updateKey) { repo.getRestrictedPackages().toList() }
 
     Column(
         modifier = modifier
@@ -228,17 +285,20 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Daily Screen Budget",
+                        text = if (restrictedPackages.isNotEmpty()) "Monitored Screen Budget" else "Daily Screen Budget",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondary
                     )
+                    val budgetHours = heroBudgetMin / 60
+                    val budgetMins = heroBudgetMin % 60
+                    val budgetStr = "${budgetHours}h ${if (budgetMins > 0) "${budgetMins}m" else "00m"}"
                     Text(
-                        text = "48m / 2h 00m",
+                        text = "${heroUsedMin}m / $budgetStr",
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        color = EmeraldDark
+                        color = if (heroUsedMin > heroBudgetMin) ErrorRed else EmeraldDark
                     )
                 }
 
@@ -254,8 +314,7 @@ fun DashboardScreen(
                         isInset = true
                     ) {
                         val trackColor = NeuSunkenTrack
-                        val primaryColor = EmeraldPrimary
-                        // Emerald Progress Arc inside the well
+                        // Progress Arc inside the well
                         Canvas(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                             // Indented Track
                             drawCircle(
@@ -263,11 +322,11 @@ fun DashboardScreen(
                                 radius = size.minDimension / 2.3f,
                                 style = Stroke(width = 8.dp.toPx())
                             )
-                            // Active Emerald Arc
+                            // Active Dynamic Progress Arc
                             drawArc(
-                                color = primaryColor,
+                                color = heroArcColor,
                                 startAngle = -90f,
-                                sweepAngle = 230f,
+                                sweepAngle = heroSweepAngle,
                                 useCenter = false,
                                 style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
                             )
@@ -284,21 +343,21 @@ fun DashboardScreen(
                                 modifier = Modifier.scale(pulseScale)
                             ) {
                                 Text(
-                                    text = "01:12",
+                                    text = heroTimeDisplay,
                                     fontSize = 28.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Black,
-                                    color = TextPrimary
+                                    color = if (heroRemainingMin == 0 && heroUsedMin >= heroBudgetMin) ErrorRed else TextPrimary
                                 )
                                 Text(
-                                    text = "REMAINING",
+                                    text = if (heroRemainingMin == 0 && heroUsedMin >= heroBudgetMin) "EXHAUSTED" else "REMAINING",
                                     fontSize = 8.sp,
                                     fontWeight = FontWeight.Black,
-                                    color = EmeraldDark,
+                                    color = if (heroRemainingMin == 0 && heroUsedMin >= heroBudgetMin) ErrorRed else EmeraldDark,
                                     letterSpacing = 1.6.sp
                                 )
                                 Text(
-                                    text = "60% left",
+                                    text = if (heroUsedMin >= heroBudgetMin) "0% left" else "${(heroFractionLeft * 100).toInt()}% left",
                                     fontSize = 9.sp,
                                     color = TextMuted,
                                     fontFamily = FontFamily.Monospace
@@ -336,8 +395,10 @@ fun DashboardScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("5M SESSIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextMuted)
-                            Text("3 Active", fontSize = 11.sp, fontWeight = FontWeight.Black, color = TextPrimary, fontFamily = FontFamily.Monospace)
+                            Text("TOTAL SCREEN", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+                            val devHours = totalDeviceScreenTimeMin / 60
+                            val devMins = totalDeviceScreenTimeMin % 60
+                            Text("${devHours}h ${devMins}m", fontSize = 11.sp, fontWeight = FontWeight.Black, color = TextPrimary, fontFamily = FontFamily.Monospace)
                         }
                     }
 
@@ -420,8 +481,8 @@ fun DashboardScreen(
                     val isLocked = repo.isAppLocked(pkg)
                     val remainingSecs = repo.getRemainingLockSeconds(pkg)
 
-                    // Daily usage progress calculation
-                    val dailyUsedMin = 48 // representative tracked daily usage
+                    // Real tracked daily usage from OS UsageStatsManager
+                    val dailyUsedMin = actualAppUsageMap[pkg] ?: 0
                     val dailyLimitMin = dailyMin.coerceAtLeast(1)
                     val progress = (dailyUsedMin.toFloat() / dailyLimitMin.toFloat()).coerceIn(0f, 1f)
                     val progressColor = when {
@@ -494,8 +555,11 @@ fun DashboardScreen(
                                         if (isLocked) {
                                             Text("${remainingSecs / 60}m remaining in lock", fontSize = 11.sp, color = ErrorRed, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                         } else {
+                                            val limitHours = dailyLimitMin / 60
+                                            val limitMins = dailyLimitMin % 60
+                                            val limitStr = if (limitHours > 0) "${limitHours}h ${if (limitMins > 0) "${limitMins}m" else "00m"}" else "${limitMins}m"
                                             Text(
-                                                text = "${dailyUsedMin}m / ${dailyLimitMin / 60}h ${dailyLimitMin % 60}m daily",
+                                                text = "${dailyUsedMin}m / $limitStr daily",
                                                 fontSize = 11.sp,
                                                 color = progressColor,
                                                 fontFamily = FontFamily.Monospace,

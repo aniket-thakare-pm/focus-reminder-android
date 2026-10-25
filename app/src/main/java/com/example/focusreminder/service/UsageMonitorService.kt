@@ -136,9 +136,10 @@ class UsageMonitorService : ComponentActivityService() {
                     val dailyBudgetMinutes = repo.getDailyLimitMinutes(currentApp)
                     val dailyCalculator = DailyUsageCalculator(dailyBudgetMs = dailyBudgetMinutes * 60 * 1000L)
 
-                    val windowStart = now - (60 * 60 * 1000L)
-                    val intervals = detector.queryForegroundIntervals(currentApp, windowStart, now)
                     val midnightStart = getTodayMidnightMs()
+                    val windowStart = now - (60 * 60 * 1000L)
+                    val queryStart = minOf(midnightStart, windowStart)
+                    val intervals = detector.queryForegroundIntervals(currentApp, queryStart, now)
 
                     val status = cooldownManager.evaluateStatus(
                         blockingEventTimeMs = null,

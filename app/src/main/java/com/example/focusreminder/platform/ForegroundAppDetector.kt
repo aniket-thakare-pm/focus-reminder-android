@@ -4,6 +4,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import com.example.focusreminder.domain.model.UsageInterval
+import java.util.Calendar
 
 /**
  * Extracts accurate foreground usage intervals from Android's UsageStatsManager.
@@ -130,5 +131,101 @@ class ForegroundAppDetector(private val context: Context) {
         }
 
         return currentForeground
+    }
+
+    /**
+     * Queries accurate foreground usage milliseconds for [packageName] from today's midnight (00:00:00).
+     */
+    fun getDailyUsageMs(packageName: String): Long {
+        val manager = usageStatsManager ?: return 0L
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val midnightMs = calendar.timeInMillis
+        val nowMs = System.currentTimeMillis()
+
+        var aggregateMs = 0L
+        try {
+            val statsMap = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+            aggregateMs = statsMap[packageName]?.totalTimeInForeground ?: 0L
+        } catch (_: Exception) {}
+
+        var eventMs = 0L
+        try {
+            val intervals = queryForegroundIntervals(packageName, midnightMs, nowMs)
+            eventMs = intervals.sumOf { it.overlapMs(midnightMs, nowMs) }
+        } catch (_: Exception) {}
+
+        return maxOf(aggregateMs, eventMs)
+    }
+
+    /**
+     * Returns a map of package names to their real daily usage in minutes for today.
+     */
+    fun getDailyUsageMinutesMap(packageNames: Collection<String>): Map<String, Int> {
+        val manager = usageStatsManager ?: return emptyMap()
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val midnightMs = calendar.timeInMillis
+        val nowMs = System.currentTimeMillis()
+
+        val result = mutableMapOf<String, Int>()
+
+        val statsMap = try {
+            manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+
+        for (pkg in packageNames) {
+            val aggMs = statsMap[pkg]?.totalTimeInForeground ?: 0L
+            val eventMs = try {
+                val intervals = queryForegroundIntervals(pkg, midnightMs, nowMs)
+                intervals.sumOf { it.overlapMs(midnightMs, nowMs) }
+            } catch (_: Exception) {
+                0L
+            }
+            val bestMs = maxOf(aggMs, eventMs)
+            result[pkg] = (bestMs / (1000 * 60)).toInt()
+        }
+
+        return result
+    }
+
+    /**
+     * Calculates total device screen time for today in minutes (across all user apps).
+     */
+    fun getTotalScreenTimeTodayMinutes(): Int {
+        val manager = usageStatsManager ?: return 0
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val midnightMs = calendar.timeInMillis
+        val nowMs = System.currentTimeMillis()
+
+        return try {
+            val statsMap = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+            val totalMs = statsMap.values
+                .filter { stats ->
+                    stats.totalTimeInForeground > 0L &&
+                    !stats.packageName.startsWith("com.android.launcher") &&
+                    !stats.packageName.startsWith("com.google.android.inputmethod") &&
+                    stats.packageName != context.packageName
+                }
+                .sumOf { it.totalTimeInForeground }
+            (totalMs / (1000 * 60)).toInt()
+        } catch (_: Exception) {
+            0
+        }
     }
 }
