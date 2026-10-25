@@ -3,12 +3,10 @@ package com.example.focusreminder.ui.apps
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +16,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -30,6 +29,10 @@ import com.example.focusreminder.ui.components.*
 
 /**
  * App Selection & Budget Configuration Screen with Neumorphic Porcelain Aesthetics.
+ *
+ * Top Controls:
+ * - Active Apps (Contains apps that have TIMER active)
+ * - Total Apps (Displays the "All Apps" section with all downloaded apps and toggle option)
  */
 @Composable
 fun AppSelectionScreen(
@@ -41,7 +44,6 @@ fun AppSelectionScreen(
     val updateKey by repo.restrictionsUpdateFlow.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf(0) } // 0 = User Apps, 1 = Presets, 2 = All Apps
     var appsList by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
     var selectedAppForConfig by remember { mutableStateOf<InstalledAppInfo?>(null) }
 
@@ -49,17 +51,33 @@ fun AppSelectionScreen(
         appsList = appManager.getLaunchableApps()
     }
 
-    val popularPresets = remember { appManager.getPopularDistractionApps() }
+    // Downloaded apps = user-installed applications (or currently restricted)
+    val allDownloadedApps = remember(appsList) {
+        appsList.filter { !it.isSystemApp || it.isRestricted }
+    }
 
-    val filteredApps = appsList.filter { app ->
-        val matchesSearch = app.appName.contains(searchQuery, ignoreCase = true) ||
-                app.packageName.contains(searchQuery, ignoreCase = true)
-        val matchesTab = when (selectedTab) {
-            0 -> !app.isSystemApp || app.isRestricted
-            1 -> true
-            else -> true
+    // Active apps = apps that have TIMER active
+    val activeApps = remember(appsList) {
+        appsList.filter { it.isRestricted }
+    }
+
+    // 0 = Active Apps, 1 = Total Apps (All Apps), null = Show Both
+    var selectedTab by remember { mutableStateOf<Int?>(0) }
+
+    val filteredActiveApps = remember(activeApps, searchQuery) {
+        if (searchQuery.isBlank()) activeApps
+        else activeApps.filter {
+            it.appName.contains(searchQuery, ignoreCase = true) ||
+            it.packageName.contains(searchQuery, ignoreCase = true)
         }
-        matchesSearch && matchesTab
+    }
+
+    val filteredDownloadedApps = remember(allDownloadedApps, searchQuery) {
+        if (searchQuery.isBlank()) allDownloadedApps
+        else allDownloadedApps.filter {
+            it.appName.contains(searchQuery, ignoreCase = true) ||
+            it.packageName.contains(searchQuery, ignoreCase = true)
+        }
     }
 
     Column(
@@ -73,27 +91,27 @@ fun AppSelectionScreen(
         // Header
         Column {
             Text(
-                text = "FEATURE A: RESTRICTIONS",
+                text = "ATTENTION MANAGEMENT",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = EmeraldDark,
                 letterSpacing = 1.8.sp
             )
             Text(
-                text = "Monitored Applications",
+                text = "Application Limits",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 color = TextPrimary
             )
             Text(
-                text = "Select installed apps or presets subject to rolling & daily limits.",
+                text = "Configure timers and rolling attention budgets for installed applications.",
                 fontSize = 12.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
 
-        // Sunken Inset Search Bar (Like Reference Image 3)
+        // Sunken Inset Search Bar
         NeuInsetWell(
             modifier = Modifier.fillMaxWidth(),
             cornerRadius = 18.dp
@@ -130,102 +148,214 @@ fun AppSelectionScreen(
             }
         }
 
-        // Category Filter Buttons
+        // ================= TOP CONTROLS: EXACTLY TWO THINGS =================
+        // Active Apps & Total Apps (Replacing old 3 items)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            listOf("User Apps", "Presets", "All Apps").forEachIndexed { index, label ->
-                val isSelected = selectedTab == index
-                NeuPill(
-                    modifier = Modifier.weight(1f),
-                    onClick = { selectedTab = index }
+            // 1. ACTIVE APPS
+            val isActiveSelected = selectedTab == 0
+            NeuPill(
+                modifier = Modifier.weight(1f),
+                onClick = { selectedTab = if (selectedTab == 0) null else 0 },
+                cornerRadius = 16.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (isActiveSelected) EmeraldPrimary else Color.Transparent)
+                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (isSelected) EmeraldPrimary else Color.Transparent)
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black,
-                            color = if (isSelected) Color.White else TextSecondary
-                        )
-                    }
+                            .size(7.dp)
+                            .background(if (isActiveSelected) Color.White else EmeraldPrimary, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Active Apps (${activeApps.size})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isActiveSelected) Color.White else TextPrimary
+                    )
                 }
             }
-        }
 
-        // Popular Presets Quick-Add Strip (if on Presets tab)
-        if (selectedTab == 1) {
-            Text(
-                text = "Tap to immediately add and lock popular distraction targets:",
-                fontSize = 11.sp,
-                color = TextMuted,
-                fontWeight = FontWeight.SemiBold
-            )
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+            // 2. TOTAL APPS
+            val isTotalSelected = selectedTab == 1
+            NeuPill(
+                modifier = Modifier.weight(1f),
+                onClick = { selectedTab = if (selectedTab == 1) null else 1 },
+                cornerRadius = 16.dp
             ) {
-                items(popularPresets) { (pkg, name) ->
-                    val isAlreadyRestricted = repo.isRestricted(pkg)
-                    NeuPill(
-                        onClick = {
-                            val nextState = !isAlreadyRestricted
-                            repo.setRestricted(pkg, name, nextState)
-                            UsageMonitorService.start(context)
-                            val statusMsg = if (nextState) "Restricted" else "Unrestricted"
-                            Toast.makeText(context, "$name is now $statusMsg", Toast.LENGTH_SHORT).show()
-                        }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(if (isAlreadyRestricted) "✓" else "+", fontSize = 12.sp, color = EmeraldDark, fontWeight = FontWeight.Black)
-                            Text(name, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (isTotalSelected) EmeraldPrimary else Color.Transparent)
+                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(if (isTotalSelected) Color.White else TextMuted, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Total Apps (${allDownloadedApps.size})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isTotalSelected) Color.White else TextPrimary
+                    )
                 }
             }
         }
 
-        // App List
+        // ================= LIST: SECTION 1 (ACTIVE APPS) & SECTION 2 (ALL APPS) =================
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 90.dp)
         ) {
-            items(filteredApps, key = { it.packageName }) { appInfo ->
-                AppRowItem(
-                    app = appInfo,
-                    onToggleRestricted = { isRestricted ->
-                        repo.setRestricted(appInfo.packageName, appInfo.appName, isRestricted)
-                        UsageMonitorService.start(context)
-                    },
-                    onConfigureLimits = {
-                        selectedAppForConfig = appInfo
-                    },
-                    onToggleTaskLock = {
-                        if (appInfo.isLocked) {
-                            repo.unlockApp(appInfo.packageName)
-                            Toast.makeText(context, "${appInfo.appName} unlocked", Toast.LENGTH_SHORT).show()
-                        } else {
-                            repo.lockApp(appInfo.packageName, appInfo.appName, durationMinutes = 30)
-                            UsageMonitorService.start(context)
-                            Toast.makeText(
-                                context,
-                                "App locked: ${appInfo.appName} (30m)",
-                                Toast.LENGTH_SHORT
-                            ).show()
+            // SECTION 1: ACTIVE APPS
+            if (selectedTab == null || selectedTab == 0) {
+                item(key = "header_active_apps") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Active Apps",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${filteredActiveApps.size} with timer active",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldDark
+                        )
+                    }
+                }
+
+                if (filteredActiveApps.isEmpty()) {
+                    item(key = "empty_active_apps") {
+                        NeuCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 20.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = if (searchQuery.isNotBlank()) "No matching active timers" else "No active app timers",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextSecondary
+                                )
+                                Text(
+                                    text = "Turn on the timer toggle next to any downloaded app in All Apps to start attention pacing.",
+                                    fontSize = 11.sp,
+                                    color = TextMuted,
+                                    textAlign = TextAlign.Center
+                                )
+                                if (searchQuery.isBlank()) {
+                                    NeuPill(
+                                        onClick = { selectedTab = 1 },
+                                        cornerRadius = 12.dp
+                                    ) {
+                                        Text(
+                                            text = "Browse All Apps →",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = EmeraldDark,
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
-                )
+                } else {
+                    items(filteredActiveApps, key = { "active_${it.packageName}" }) { appInfo ->
+                        ActiveAppRowItem(
+                            app = appInfo,
+                            onToggleRestricted = { isRestricted ->
+                                repo.setRestricted(appInfo.packageName, appInfo.appName, isRestricted)
+                                UsageMonitorService.start(context)
+                                Toast.makeText(context, "${appInfo.appName} timer removed", Toast.LENGTH_SHORT).show()
+                            },
+                            onConfigureLimits = {
+                                selectedAppForConfig = appInfo
+                            },
+                            onToggleTaskLock = {
+                                if (appInfo.isLocked) {
+                                    repo.unlockApp(appInfo.packageName)
+                                    Toast.makeText(context, "${appInfo.appName} unlocked", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    repo.lockApp(appInfo.packageName, appInfo.appName, durationMinutes = 30)
+                                    UsageMonitorService.start(context)
+                                    Toast.makeText(context, "${appInfo.appName} locked (30m)", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // SECTION 2: ALL APPS ("All Apps would be the section title")
+            if (selectedTab == null || selectedTab == 1) {
+                item(key = "header_all_apps") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = if (selectedTab == null) 16.dp else 4.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "All Apps",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${filteredDownloadedApps.size} downloaded",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                items(filteredDownloadedApps, key = { "all_${it.packageName}" }) { appInfo ->
+                    AllAppRowItem(
+                        app = appInfo,
+                        onToggleRestricted = { isRestricted ->
+                            repo.setRestricted(appInfo.packageName, appInfo.appName, isRestricted)
+                            UsageMonitorService.start(context)
+                            val msg = if (isRestricted) "${appInfo.appName} timer activated" else "${appInfo.appName} timer removed"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        },
+                        onConfigureLimits = {
+                            selectedAppForConfig = appInfo
+                        }
+                    )
+                }
             }
         }
     }
@@ -243,8 +373,12 @@ fun AppSelectionScreen(
     }
 }
 
+/**
+ * Row item for apps with active timer in the "Active Apps" section.
+ * Shows configured limits, task lock button, and toggle switch.
+ */
 @Composable
-fun AppRowItem(
+fun ActiveAppRowItem(
     app: InstalledAppInfo,
     onToggleRestricted: (Boolean) -> Unit,
     onConfigureLimits: () -> Unit,
@@ -253,13 +387,16 @@ fun AppRowItem(
     NeuCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 24.dp,
-        onClick = if (app.isRestricted) onConfigureLimits else null
+        elevation = 6.dp,
+        onClick = onConfigureLimits
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Top Row: Icon, App Name & Timer Summary, Switch
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -282,55 +419,55 @@ fun AppRowItem(
                         Image(
                             bitmap = bitmap,
                             contentDescription = app.appName,
-                            modifier = Modifier.size(42.dp)
+                            modifier = Modifier.size(44.dp)
                         )
                     } else {
                         NeuInsetWell(
-                            modifier = Modifier.size(42.dp),
+                            modifier = Modifier.size(44.dp),
                             cornerRadius = 14.dp
                         ) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(app.appName.take(1).uppercase(), fontWeight = FontWeight.Black, color = EmeraldDark)
+                                Text(app.appName.take(1).uppercase(), fontWeight = FontWeight.Black, color = EmeraldDark, fontSize = 16.sp)
                             }
                         }
                     }
 
-                    Column {
+                    Column(modifier = Modifier.padding(end = 8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = app.appName,
-                                fontSize = 14.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
-                            if (app.isSystemApp) {
-                                NeuInsetWell(cornerRadius = 4.dp) {
-                                    Text("SYSTEM", fontSize = 8.sp, color = TextMuted, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                            if (app.isLocked) {
+                                NeuInsetWell(cornerRadius = 6.dp) {
+                                    Text(
+                                        text = "LOCKED",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = ErrorRed,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
                                 }
                             }
                         }
-
-                        if (app.isRestricted) {
-                            Text(
-                                text = "Rolling: ${app.rollingBudgetMinutes}m • Daily: ${app.dailyLimitMinutes / 60}h ${app.dailyLimitMinutes % 60}m",
-                                fontSize = 11.sp,
-                                color = EmeraldDark,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        } else {
-                            Text(
-                                text = app.packageName,
-                                fontSize = 10.sp,
-                                color = TextMuted,
-                                maxLines = 1
-                            )
-                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        val dailyHours = app.dailyLimitMinutes / 60
+                        val dailyMins = app.dailyLimitMinutes % 60
+                        val dailyStr = if (dailyHours > 0) "${dailyHours}h ${if (dailyMins > 0) "${dailyMins}m" else "00m"}" else "${dailyMins}m"
+                        Text(
+                            text = "Rolling: ${app.rollingBudgetMinutes}m • Daily: $dailyStr",
+                            fontSize = 11.sp,
+                            color = EmeraldDark,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
 
                 Switch(
-                    checked = app.isRestricted,
+                    checked = true,
                     onCheckedChange = onToggleRestricted,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
@@ -341,76 +478,159 @@ fun AppRowItem(
                 )
             }
 
-            // Task Lock Row (if restricted) - Golden Rule: Debossed well inside Embossed card
-            if (app.isRestricted) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (app.isLocked) {
+            // Bottom Action Row: Edit Hint & Task Lock Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (app.isLocked) {
+                    Text(
+                        text = "Locked: ${app.remainingLockSeconds / 60}m remaining",
+                        fontSize = 11.sp,
+                        color = ErrorRed,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
+                    NeuInsetWell(
+                        onClick = onToggleTaskLock,
+                        cornerRadius = 10.dp
+                    ) {
+                        Text(
+                            text = "Unlock",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ErrorRed,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Tap card to edit limits • or",
+                        fontSize = 10.sp,
+                        color = TextMuted
+                    )
+                    NeuInsetWell(
+                        onClick = onToggleTaskLock,
+                        cornerRadius = 10.dp
+                    ) {
                         Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             SimpleLockIcon(
-                                color = ErrorRed,
+                                color = EmeraldDark,
                                 modifier = Modifier.size(13.dp),
-                                isLocked = true
+                                isLocked = false
                             )
                             Text(
-                                text = "Locked: ${app.remainingLockSeconds / 60}m remaining",
-                                fontSize = 11.sp,
-                                color = ErrorRed,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        NeuInsetWell(
-                            onClick = onToggleTaskLock,
-                            cornerRadius = 10.dp
-                        ) {
-                            Text(
-                                text = "Unlock",
+                                text = "Lock (30m)",
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ErrorRed,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                fontWeight = FontWeight.Black,
+                                color = EmeraldDark
                             )
-                        }
-                    } else {
-                        Text(
-                            text = "Tap to configure limits • or",
-                            fontSize = 10.sp,
-                            color = TextMuted
-                        )
-                        NeuInsetWell(
-                            onClick = onToggleTaskLock,
-                            cornerRadius = 10.dp
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                SimpleLockIcon(
-                                    color = EmeraldDark,
-                                    modifier = Modifier.size(13.dp),
-                                    isLocked = false
-                                )
-                                Text(
-                                    text = "Lock (30m)",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = EmeraldDark
-                                )
-                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Row item for apps in the "All Apps" section.
+ * Shows all downloaded apps with a toggle option just like requested.
+ */
+@Composable
+fun AllAppRowItem(
+    app: InstalledAppInfo,
+    onToggleRestricted: (Boolean) -> Unit,
+    onConfigureLimits: () -> Unit
+) {
+    NeuCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 24.dp,
+        elevation = 4.dp,
+        onClick = if (app.isRestricted) onConfigureLimits else null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                val bitmap = remember(app.icon) {
+                    try {
+                        app.icon?.toBitmap(width = 96, height = 96)?.asImageBitmap()
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = app.appName,
+                        modifier = Modifier.size(42.dp)
+                    )
+                } else {
+                    NeuInsetWell(
+                        modifier = Modifier.size(42.dp),
+                        cornerRadius = 14.dp
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(app.appName.take(1).uppercase(), fontWeight = FontWeight.Black, color = EmeraldDark)
+                        }
+                    }
+                }
+
+                Column(modifier = Modifier.padding(end = 8.dp)) {
+                    Text(
+                        text = app.appName,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    if (app.isRestricted) {
+                        val dailyHours = app.dailyLimitMinutes / 60
+                        val dailyMins = app.dailyLimitMinutes % 60
+                        val dailyStr = if (dailyHours > 0) "${dailyHours}h ${if (dailyMins > 0) "${dailyMins}m" else "00m"}" else "${dailyMins}m"
+                        Text(
+                            text = "Timer Active • Rolling: ${app.rollingBudgetMinutes}m • Daily: $dailyStr",
+                            fontSize = 11.sp,
+                            color = EmeraldDark,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    } else {
+                        Text(
+                            text = app.packageName,
+                            fontSize = 10.sp,
+                            color = TextMuted,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            Switch(
+                checked = app.isRestricted,
+                onCheckedChange = onToggleRestricted,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = EmeraldPrimary,
+                    uncheckedThumbColor = Color(0xFF94A3B8),
+                    uncheckedTrackColor = Color(0xFFD5DBE5)
+                )
+            )
         }
     }
 }
