@@ -40,6 +40,7 @@ fun MainScreen(
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(AppNavigationTab.TIMER) }
     var analyticsFocusedPackage by remember { mutableStateOf<String?>(null) }
+    var appSelectionInitialTab by remember { mutableStateOf<Int?>(0) }
 
     BioluminescentBackground(showGrid = false) {
         Box(
@@ -55,7 +56,10 @@ fun MainScreen(
             ) { tab ->
                 when (tab) {
                     AppNavigationTab.TIMER -> DashboardScreen(
-                        onNavigateToApps = { currentTab = AppNavigationTab.APPS },
+                        onNavigateToApps = {
+                            appSelectionInitialTab = 1
+                            currentTab = AppNavigationTab.APPS
+                        },
                         onNavigateToAlerts = { currentTab = AppNavigationTab.ALERTS },
                         onNavigateToAnalytics = { currentTab = AppNavigationTab.ANALYTICS },
                         onNavigateToAppAnalytics = { pkg ->
@@ -89,6 +93,7 @@ fun MainScreen(
                         onClearInitialPackage = { analyticsFocusedPackage = null }
                     )
                     AppNavigationTab.APPS -> AppSelectionScreen(
+                        initialTab = appSelectionInitialTab,
                         onNavigateToAppAnalytics = { pkg ->
                             analyticsFocusedPackage = pkg
                             currentTab = AppNavigationTab.ANALYTICS
@@ -149,7 +154,10 @@ fun MainScreen(
                         // Tab 3: Apps
                         NeuIconNavButton(
                             isSelected = currentTab == AppNavigationTab.APPS,
-                            onClick = { currentTab = AppNavigationTab.APPS }
+                            onClick = {
+                                appSelectionInitialTab = 0
+                                currentTab = AppNavigationTab.APPS
+                            }
                         ) { color ->
                             NavAppsIcon(color = color)
                         }

@@ -168,45 +168,21 @@ fun DashboardScreen(
                     letterSpacing = (-0.8).sp
                 )
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Theme Toggle Box in top right - clean box, icon only, no text
+            NeuCard(
+                onClick = { ThemeManager.toggleTheme() },
+                cornerRadius = 12.dp,
+                elevation = 3.dp
             ) {
-                // Theme Toggle Pill (Dark Obsidian / Light Porcelain Soft UI)
-                NeuPill(
-                    onClick = { ThemeManager.toggleTheme() },
-                    cornerRadius = 14.dp,
-                    elevation = 4.dp
+                Box(
+                    modifier = Modifier.size(38.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.size(38.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ThemeToggleIcon(
-                            isDark = ThemeManager.isDarkTheme,
-                            color = if (ThemeManager.isDarkTheme) Color(0xFFFBBF24) else TextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                NeuPill(
-                    modifier = Modifier.padding(2.dp),
-                    onClick = onNavigateToApps
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(modifier = Modifier.size(6.dp).background(EmeraldPrimary, CircleShape))
-                        Text(
-                            text = "+ Add App",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = EmeraldDark
-                        )
-                    }
+                    ThemeToggleIcon(
+                        isDark = ThemeManager.isDarkTheme,
+                        color = if (ThemeManager.isDarkTheme) Color(0xFFFBBF24) else TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -642,6 +618,29 @@ fun DashboardScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // Small height, complete width rectangle in grey text redirecting to Total Apps
+            NeuCard(
+                modifier = Modifier.fillMaxWidth(),
+                cornerRadius = 14.dp,
+                elevation = 2.dp,
+                onClick = onNavigateToApps
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Add More App",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSecondary,
+                        letterSpacing = 0.4.sp
+                    )
                 }
             }
         }

@@ -40,6 +40,7 @@ import com.example.focusreminder.util.formatHoursMinutes
  */
 @Composable
 fun AppSelectionScreen(
+    initialTab: Int? = 0,
     onNavigateToAppAnalytics: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -67,7 +68,7 @@ fun AppSelectionScreen(
     }
 
     // 0 = Active Apps, 1 = Total Apps (All Apps), null = Show Both
-    var selectedTab by remember { mutableStateOf<Int?>(0) }
+    var selectedTab by remember(initialTab) { mutableStateOf<Int?>(initialTab) }
 
     val filteredActiveApps = remember(activeApps, searchQuery) {
         if (searchQuery.isBlank()) activeApps
