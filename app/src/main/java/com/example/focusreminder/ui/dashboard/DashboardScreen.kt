@@ -30,6 +30,7 @@ import com.example.focusreminder.platform.UsagePermissionHelper
 import com.example.focusreminder.service.UsageMonitorService
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.*
+import com.example.focusreminder.util.formatHoursMinutes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -290,11 +291,8 @@ fun DashboardScreen(
                         fontWeight = FontWeight.Bold,
                         color = TextSecondary
                     )
-                    val budgetHours = heroBudgetMin / 60
-                    val budgetMins = heroBudgetMin % 60
-                    val budgetStr = "${budgetHours}h ${if (budgetMins > 0) "${budgetMins}m" else "00m"}"
                     Text(
-                        text = "${heroUsedMin}m / $budgetStr",
+                        text = "${formatHoursMinutes(heroUsedMin)} / ${formatHoursMinutes(heroBudgetMin)}",
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
@@ -553,13 +551,20 @@ fun DashboardScreen(
                                         }
                                         Spacer(modifier = Modifier.height(2.dp))
                                         if (isLocked) {
-                                            Text("${remainingSecs / 60}m remaining in lock", fontSize = 11.sp, color = ErrorRed, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                            if (dailyUsedMin >= dailyLimitMin) {
+                                                Text(
+                                                    text = "${formatHoursMinutes(dailyUsedMin)} / ${formatHoursMinutes(dailyLimitMin)} • Locked until midnight",
+                                                    fontSize = 11.sp,
+                                                    color = ErrorRed,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            } else {
+                                                Text("${remainingSecs / 60}m remaining in lock", fontSize = 11.sp, color = ErrorRed, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                            }
                                         } else {
-                                            val limitHours = dailyLimitMin / 60
-                                            val limitMins = dailyLimitMin % 60
-                                            val limitStr = if (limitHours > 0) "${limitHours}h ${if (limitMins > 0) "${limitMins}m" else "00m"}" else "${limitMins}m"
                                             Text(
-                                                text = "${dailyUsedMin}m / $limitStr daily",
+                                                text = "${formatHoursMinutes(dailyUsedMin)} / ${formatHoursMinutes(dailyLimitMin)} daily",
                                                 fontSize = 11.sp,
                                                 color = progressColor,
                                                 fontFamily = FontFamily.Monospace,

@@ -26,6 +26,7 @@ import com.example.focusreminder.platform.InstalledAppInfo
 import com.example.focusreminder.service.UsageMonitorService
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.*
+import com.example.focusreminder.util.formatHoursMinutes
 
 /**
  * App Selection & Budget Configuration Screen with Neumorphic Porcelain Aesthetics.
@@ -453,9 +454,7 @@ fun ActiveAppRowItem(
                             }
                         }
                         Spacer(modifier = Modifier.height(2.dp))
-                        val dailyHours = app.dailyLimitMinutes / 60
-                        val dailyMins = app.dailyLimitMinutes % 60
-                        val dailyStr = if (dailyHours > 0) "${dailyHours}h ${if (dailyMins > 0) "${dailyMins}m" else "00m"}" else "${dailyMins}m"
+                        val dailyStr = formatHoursMinutes(app.dailyLimitMinutes)
                         Text(
                             text = "Rolling: ${app.rollingBudgetMinutes}m • Daily: $dailyStr",
                             fontSize = 11.sp,
@@ -600,9 +599,7 @@ fun AllAppRowItem(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     if (app.isRestricted) {
-                        val dailyHours = app.dailyLimitMinutes / 60
-                        val dailyMins = app.dailyLimitMinutes % 60
-                        val dailyStr = if (dailyHours > 0) "${dailyHours}h ${if (dailyMins > 0) "${dailyMins}m" else "00m"}" else "${dailyMins}m"
+                        val dailyStr = formatHoursMinutes(app.dailyLimitMinutes)
                         Text(
                             text = "Timer Active • Rolling: ${app.rollingBudgetMinutes}m • Daily: $dailyStr",
                             fontSize = 11.sp,

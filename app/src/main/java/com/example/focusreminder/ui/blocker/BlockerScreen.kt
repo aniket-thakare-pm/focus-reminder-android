@@ -32,18 +32,24 @@ fun BlockerScreen(
     onNavigateHome: () -> Unit,
     onStartEmergencyReflection: () -> Unit
 ) {
-    var secondsLeft by remember { mutableLongStateOf(remainingCooldownSeconds) }
+    var secondsLeft by remember(remainingCooldownSeconds) { mutableLongStateOf(remainingCooldownSeconds) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(remainingCooldownSeconds) {
+        secondsLeft = remainingCooldownSeconds
         while (secondsLeft > 0) {
             kotlinx.coroutines.delay(1000L)
             secondsLeft -= 1
         }
     }
 
-    val minutes = secondsLeft / 60
+    val hours = secondsLeft / 3600
+    val minutes = (secondsLeft % 3600) / 60
     val seconds = secondsLeft % 60
-    val timeFormatted = String.format("%02d:%02d", minutes, seconds)
+    val timeFormatted = if (hours > 0) {
+        String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format("%02d:%02d", minutes, seconds)
+    }
 
     Box(
         modifier = Modifier
@@ -137,7 +143,7 @@ fun BlockerScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = timeFormatted,
-                            fontSize = 44.sp,
+                            fontSize = if (hours > 0) 30.sp else 44.sp,
                             fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace,
                             color = TextPrimary,

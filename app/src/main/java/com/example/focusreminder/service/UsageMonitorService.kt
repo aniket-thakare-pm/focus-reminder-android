@@ -110,54 +110,64 @@ class UsageMonitorService : ComponentActivityService() {
                 if (restrictedPackages.contains(currentApp)) {
                     val now = System.currentTimeMillis()
 
-                    // Debounce if already blocked in the last 3.5 seconds
-                    if (currentApp == lastBlockedPackage && (now - lastBlockedTimeMs) < 3500L) {
-                        continue
-                    }
-
                     // 1. Check if user currently has an emergency override active
                     if (repo.hasActiveEmergencyOverride(currentApp)) {
                         continue
                     }
 
                     val appLabel = repo.getAppName(currentApp, currentApp.substringAfterLast("."))
+                    val midnightStart = getTodayMidnightMs()
+                    val dailyBudgetMinutes = repo.getDailyLimitMinutes(currentApp)
+                    val dailyBudgetMs = dailyBudgetMinutes * 60 * 1000L
 
-                    // 2. Check if under direct Task Lock / Manual Cooldown
-                    if (repo.isAppLocked(currentApp)) {
-                        val remainingSecs = repo.getRemainingLockSeconds(currentApp)
-                        lastBlockedPackage = currentApp
-                        lastBlockedTimeMs = now
-                        triggerBlocker(currentApp, appLabel, isDailyLimit = false, cooldownSeconds = remainingSecs)
+                    // Accurate daily usage directly from OS UsageStatsManager
+                    val dailyUsedMs = detector.getDailyUsageMs(currentApp)
+                    val isDailyExhausted = dailyBudgetMs > 0L && dailyUsedMs >= dailyBudgetMs
+
+                    // Calculate remaining seconds until midnight for daily lock
+                    val nextMidnightMs = midnightStart + (24 * 60 * 60 * 1000L)
+                    val secondsUntilMidnight = maxOf(60L, (nextMidnightMs - now) / 1000L)
+
+                    // 2. STRICT DAILY LIMIT ENFORCEMENT
+                    if (isDailyExhausted) {
+                        // Lock app for the rest of the day until midnight
+                        repo.lockApp(currentApp, appLabel, durationMinutes = (secondsUntilMidnight / 60).toInt())
+
+                        if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
+                            lastBlockedPackage = currentApp
+                            lastBlockedTimeMs = now
+                            triggerBlocker(currentApp, appLabel, isDailyLimit = true, cooldownSeconds = secondsUntilMidnight)
+                        }
                         continue
                     }
 
-                    // 3. Check rolling usage budget and daily usage
+                    // 3. Check if under direct Task Lock / Manual Cooldown
+                    if (repo.isAppLocked(currentApp)) {
+                        val remainingSecs = repo.getRemainingLockSeconds(currentApp)
+                        if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
+                            lastBlockedPackage = currentApp
+                            lastBlockedTimeMs = now
+                            triggerBlocker(currentApp, appLabel, isDailyLimit = false, cooldownSeconds = remainingSecs)
+                        }
+                        continue
+                    }
+
+                    // 4. Check rolling continuous session budget (last 60 minutes)
                     val rollingBudgetMinutes = repo.getRollingBudgetMinutes(currentApp)
-                    val dailyBudgetMinutes = repo.getDailyLimitMinutes(currentApp)
-                    val dailyCalculator = DailyUsageCalculator(dailyBudgetMs = dailyBudgetMinutes * 60 * 1000L)
-
-                    val midnightStart = getTodayMidnightMs()
+                    val rollingCalculator = RollingWindowUsageCalculator(budgetMs = rollingBudgetMinutes * 60 * 1000L)
                     val windowStart = now - (60 * 60 * 1000L)
-                    val queryStart = minOf(midnightStart, windowStart)
-                    val intervals = detector.queryForegroundIntervals(currentApp, queryStart, now)
+                    val intervals = detector.queryForegroundIntervals(currentApp, windowStart, now)
 
-                    val status = cooldownManager.evaluateStatus(
-                        blockingEventTimeMs = null,
-                        intervals = intervals,
-                        rollingCalculator = rollingCalculator,
-                        dailyCalculator = dailyCalculator,
-                        midnightStartMs = midnightStart,
-                        currentTimeMs = now,
-                        emergencyOverrideExpiryMs = null
-                    )
-
-                    if (status.isBlocked) {
-                        lastBlockedPackage = currentApp
-                        lastBlockedTimeMs = now
-                        val isDaily = status.reason == com.example.focusreminder.domain.engine.BlockReason.DAILY_LIMIT_EXHAUSTED
-                        // Automatically lock for remaining cooldown
+                    val rollingResult = rollingCalculator.evaluate(intervals, now)
+                    if (rollingResult.isBudgetExhausted) {
+                        // Automatically lock for rolling cooldown (30m)
                         repo.lockApp(currentApp, appLabel, durationMinutes = 30)
-                        triggerBlocker(currentApp, appLabel, isDailyLimit = isDaily, cooldownSeconds = 1800L)
+                        if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
+                            lastBlockedPackage = currentApp
+                            lastBlockedTimeMs = now
+                            triggerBlocker(currentApp, appLabel, isDailyLimit = false, cooldownSeconds = 1800L)
+                        }
+                        continue
                     }
                 }
             }

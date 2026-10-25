@@ -97,44 +97,44 @@ class ForegroundAppDetector(private val context: Context) {
 
         val events = manager.queryEvents(startTime, endTime)
         val event = UsageEvents.Event()
-        var currentForeground: String? = null
+        var lastResumedPackage: String? = null
 
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
             when (event.eventType) {
                 UsageEvents.Event.ACTIVITY_RESUMED -> {
-                    currentForeground = event.packageName
-                }
-                UsageEvents.Event.ACTIVITY_PAUSED,
-                UsageEvents.Event.ACTIVITY_STOPPED -> {
-                    if (event.packageName == currentForeground) {
-                        currentForeground = null
-                    }
+                    lastResumedPackage = event.packageName
                 }
                 UsageEvents.Event.SCREEN_NON_INTERACTIVE -> {
-                    currentForeground = null
+                    lastResumedPackage = null
+                }
+                UsageEvents.Event.KEYGUARD_SHOWN -> {
+                    lastResumedPackage = null
                 }
             }
         }
 
-        // Fallback: Check most recently used app in last 5 seconds
-        if (currentForeground == null) {
-            val statsList = manager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
-                endTime - 10_000L,
-                endTime
-            )
-            val mostRecent = statsList?.maxByOrNull { it.lastTimeUsed }
-            if (mostRecent != null && (endTime - mostRecent.lastTimeUsed) < 5000L) {
-                currentForeground = mostRecent.packageName
-            }
+        if (lastResumedPackage != null) {
+            return lastResumedPackage
         }
 
-        return currentForeground
+        // Fallback: Check most recently used app in last 10 seconds
+        val statsList = manager.queryUsageStats(
+            UsageStatsManager.INTERVAL_DAILY,
+            endTime - 10_000L,
+            endTime
+        )
+        val mostRecent = statsList?.maxByOrNull { it.lastTimeUsed }
+        if (mostRecent != null && (endTime - mostRecent.lastTimeUsed) < 6000L) {
+            return mostRecent.packageName
+        }
+
+        return null
     }
 
     /**
      * Queries accurate foreground usage milliseconds for [packageName] from today's midnight (00:00:00).
+     * Uses Android OS UsageStatsManager aggregation, matching Digital Wellbeing.
      */
     fun getDailyUsageMs(packageName: String): Long {
         val manager = usageStatsManager ?: return 0L
@@ -147,19 +147,23 @@ class ForegroundAppDetector(private val context: Context) {
         val midnightMs = calendar.timeInMillis
         val nowMs = System.currentTimeMillis()
 
-        var aggregateMs = 0L
+        // 1. Primary: queryAndAggregateUsageStats (exact OS aggregate since midnight)
         try {
             val statsMap = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-            aggregateMs = statsMap[packageName]?.totalTimeInForeground ?: 0L
+            val stats = statsMap[packageName]
+            if (stats != null && stats.totalTimeInForeground > 0L) {
+                return stats.totalTimeInForeground
+            }
         } catch (_: Exception) {}
 
-        var eventMs = 0L
+        // 2. Direct daily bucket fallback
         try {
-            val intervals = queryForegroundIntervals(packageName, midnightMs, nowMs)
-            eventMs = intervals.sumOf { it.overlapMs(midnightMs, nowMs) }
+            val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
+            val total = list.filter { it.packageName == packageName }.sumOf { it.totalTimeInForeground }
+            if (total > 0L) return total
         } catch (_: Exception) {}
 
-        return maxOf(aggregateMs, eventMs)
+        return 0L
     }
 
     /**
@@ -178,22 +182,21 @@ class ForegroundAppDetector(private val context: Context) {
 
         val result = mutableMapOf<String, Int>()
 
-        val statsMap = try {
-            manager.queryAndAggregateUsageStats(midnightMs, nowMs)
-        } catch (_: Exception) {
-            emptyMap()
-        }
-
-        for (pkg in packageNames) {
-            val aggMs = statsMap[pkg]?.totalTimeInForeground ?: 0L
-            val eventMs = try {
-                val intervals = queryForegroundIntervals(pkg, midnightMs, nowMs)
-                intervals.sumOf { it.overlapMs(midnightMs, nowMs) }
-            } catch (_: Exception) {
-                0L
+        try {
+            val statsMap = manager.queryAndAggregateUsageStats(midnightMs, nowMs)
+            for (pkg in packageNames) {
+                val fgMs = statsMap[pkg]?.totalTimeInForeground ?: 0L
+                result[pkg] = (fgMs / (1000 * 60)).toInt()
             }
-            val bestMs = maxOf(aggMs, eventMs)
-            result[pkg] = (bestMs / (1000 * 60)).toInt()
+        } catch (_: Exception) {
+            try {
+                val list = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, midnightMs, nowMs)
+                val grouped = list.groupBy { it.packageName }
+                for (pkg in packageNames) {
+                    val fgMs = grouped[pkg]?.sumOf { it.totalTimeInForeground } ?: 0L
+                    result[pkg] = (fgMs / (1000 * 60)).toInt()
+                }
+            } catch (_: Exception) {}
         }
 
         return result

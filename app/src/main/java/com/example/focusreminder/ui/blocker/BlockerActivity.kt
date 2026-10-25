@@ -28,17 +28,19 @@ class BlockerActivity : ComponentActivity() {
                 putExtra(EXTRA_COOLDOWN_SECONDS, cooldownSeconds)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
             }
         }
     }
 
+    private var appNameState by mutableStateOf("Selected Application")
+    private var isDailyLimitState by mutableStateOf(false)
+    private var cooldownSecondsState by mutableLongStateOf(1800L)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val appName = intent.getStringExtra(EXTRA_APP_NAME) ?: "Selected Application"
-        val isDailyLimit = intent.getBooleanExtra(EXTRA_IS_DAILY_LIMIT, false)
-        val cooldownSeconds = intent.getLongExtra(EXTRA_COOLDOWN_SECONDS, 1800L)
+        updateFromIntent(intent)
 
         setContent {
             FocusReminderTheme {
@@ -46,12 +48,12 @@ class BlockerActivity : ComponentActivity() {
 
                 if (isReflecting) {
                     ReflectiveAccessScreen(
-                        appName = appName,
+                        appName = appNameState,
                         onCancel = { isReflecting = false },
                         onGrantOverride = { answers, requestedMinutes ->
                             // Record answers locally and grant temporary override in repository
                             val repo = com.example.focusreminder.platform.AppRestrictionRepository.getInstance(this@BlockerActivity)
-                            repo.grantEmergencyOverride(appName, requestedMinutes)
+                            repo.grantEmergencyOverride(appNameState, requestedMinutes)
 
                             val prefs = getSharedPreferences("emergency_override", Context.MODE_PRIVATE)
                             val expiryMs = System.currentTimeMillis() + (requestedMinutes * 60 * 1000L)
@@ -71,9 +73,9 @@ class BlockerActivity : ComponentActivity() {
                     )
                 } else {
                     BlockerScreen(
-                        restrictedAppName = appName,
-                        isDailyLimit = isDailyLimit,
-                        remainingCooldownSeconds = cooldownSeconds,
+                        restrictedAppName = appNameState,
+                        isDailyLimit = isDailyLimitState,
+                        remainingCooldownSeconds = cooldownSecondsState,
                         onNavigateHome = {
                             // Navigate to Android home launcher
                             val homeIntent = Intent(Intent.ACTION_MAIN).apply {
@@ -89,6 +91,20 @@ class BlockerActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        updateFromIntent(intent)
+    }
+
+    private fun updateFromIntent(intent: Intent?) {
+        intent?.let {
+            appNameState = it.getStringExtra(EXTRA_APP_NAME) ?: "Selected Application"
+            isDailyLimitState = it.getBooleanExtra(EXTRA_IS_DAILY_LIMIT, false)
+            cooldownSecondsState = it.getLongExtra(EXTRA_COOLDOWN_SECONDS, 1800L)
         }
     }
 
