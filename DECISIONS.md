@@ -19,7 +19,8 @@
 | ADR-007 | Full-Screen Reminder Fallback Presentation | Accepted | UI / Notifications |
 | ADR-008 | Daily Total App Limit (Cumulative Budget) | Accepted | Core Usage Engine |
 | ADR-009 | Session Contract, Live Chronometer & Cooldown | Accepted | UX / Focus Enforcement |
-| ADR-010 | OEM Status Bar Floating Capsule & Chronometer Fix | Accepted | UX / Status Bar Overlay |
+| ADR-010 | Notification Bar Chronometer & Session Pause Lifecycle | Accepted | UX / Lifecycle |
+| ADR-011 | Monotonic High-Water Mark Store & Service Resuscitation | Accepted | Storage / Reliability |
 
 ---
 
@@ -132,3 +133,15 @@
   3. **Banked Time & Grace Period:** When the user leaves, remaining time is paused and banked (`remainingSessionMs = maxOf(0L, activeSessionEndTimeMs - now)`). If they re-enter within the 5-minute grace period, the session resumes smoothly with exact remaining time. If they stay away for > 5 minutes, the session cleanly expires.
 - **Rationale:** Prevents UI clutter, respects native Android system bars, and guarantees accurate session time accounting without phantom background countdowns.
 - **Consequences:** Deleted `FloatingTimerOverlay.kt`, implemented pause/resume state machine in `UsageMonitorService`, and bumped release to `v1.5.2`.
+
+---
+
+## ADR-011: Monotonic High-Water Mark Store & Service Resuscitation
+
+- **Context:** Android's in-memory `UsageEvents` ring buffer evicts morning events as phone activity accumulates throughout the day, which can cause daily usage to artificially shrink late in the day. Furthermore, OEM battery managers can kill background services while the device is asleep.
+- **Decision:**
+  1. **Monotonic High-Water Mark Store (`DailyUsageHighWaterMarkStore`):** Maintain a persistent local high-water mark for every package and total screen time keyed by date (`YYYY-MM-DD`). Daily usage is calculated as $\max(\text{RAM Events}, \text{OS Disk Bucket}, \text{Aggregated Stats}, \text{Stored High-Water Mark})$. Usage within a day can mathematically never decrease.
+  2. **Midnight Rollover & Auto-Prune:** Automatically resets at midnight when the date key increments, and prunes historical keys older than 7 days.
+  3. **Screen Unlock Resuscitation (`ACTION_USER_PRESENT`):** `BootReceiver` listens for `ACTION_USER_PRESENT` to automatically revive `UsageMonitorService` if killed by OEM battery savers during screen-off sleep.
+- **Rationale:** Immunizes the app against Android OS event buffer evictions, memory pressure, and aggressive OEM background app killing.
+- **Consequences:** Created `DailyUsageHighWaterMarkStore`, updated `ForegroundAppDetector`, wired `BootReceiver` and `AndroidManifest.xml`, and bumped release to `v1.6.0`.

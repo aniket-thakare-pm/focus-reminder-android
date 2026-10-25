@@ -19,6 +19,9 @@ class ForegroundAppDetector(private val context: Context) {
     private val usageStatsManager: UsageStatsManager? =
         context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
 
+    private val highWaterMarkStore: DailyUsageHighWaterMarkStore =
+        DailyUsageHighWaterMarkStore.getInstance(context)
+
     /**
      * Queries foreground intervals for [targetPackageName] within [startTimeMs, endTimeMs].
      */
@@ -271,8 +274,9 @@ class ForegroundAppDetector(private val context: Context) {
             }
         } catch (_: Exception) {}
 
-        // Crucial: Use maxOf so truncated RAM event buffers never discard persistent daily history on disk
-        return maxOf(eventMs, bucketMs, aggregateMs)
+        // Crucial: Use maxOf across RAM events, disk buckets, and our persistent high-water mark
+        val rawMaxMs = maxOf(eventMs, bucketMs, aggregateMs)
+        return highWaterMarkStore.updateHighWaterMarkMs(packageName, rawMaxMs)
     }
 
     /**
@@ -330,8 +334,9 @@ class ForegroundAppDetector(private val context: Context) {
             val eMs = eventMap[pkg] ?: 0L
             val bMs = bucketMap[pkg] ?: 0L
             val aMs = aggregateMap[pkg] ?: 0L
-            val bestMs = maxOf(eMs, bMs, aMs)
-            result[pkg] = (bestMs / (1000 * 60)).toInt()
+            val rawMs = maxOf(eMs, bMs, aMs)
+            val verifiedMs = highWaterMarkStore.updateHighWaterMarkMs(pkg, rawMs)
+            result[pkg] = (verifiedMs / (1000 * 60)).toInt()
         }
 
         return result
@@ -393,8 +398,9 @@ class ForegroundAppDetector(private val context: Context) {
                 .sumOf { it.totalTimeInForeground }
         } catch (_: Exception) {}
 
-        val bestTotalMs = maxOf(eventTotalMs, bucketTotalMs, aggregateTotalMs)
-        return (bestTotalMs / (1000 * 60)).toInt()
+        val rawTotalMs = maxOf(eventTotalMs, bucketTotalMs, aggregateTotalMs)
+        val verifiedTotalMs = highWaterMarkStore.updateScreenTimeHighWaterMarkMs(rawTotalMs)
+        return (verifiedTotalMs / (1000 * 60)).toInt()
     }
 
     private fun isSystemOrLauncherPackage(pkg: String): Boolean {

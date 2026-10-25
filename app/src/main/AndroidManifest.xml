@@ -97,13 +97,14 @@
             </intent-filter>
         </receiver>
 
-        <!-- Device Boot Receiver to Restore Scheduled Alarms -->
+        <!-- Device Boot & Unlock Receiver to Restore Alarms and Resuscitate Service -->
         <receiver
             android:name=".receiver.BootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.USER_PRESENT" />
             </intent-filter>
         </receiver>
 

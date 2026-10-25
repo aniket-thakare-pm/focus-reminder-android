@@ -1,6 +1,14 @@
 # Focus & Reminder — Version Changelog
 
-### v1.5.5 (Current) — 2026-10-25
+### v1.6.0 (Current) — 2026-10-25
+* **Type:** Feature Release / Persistent High-Water Mark Store & Service Resuscitation
+* **Summary:**
+  - **Persistent High-Water Mark Store (`DailyUsageHighWaterMarkStore`):** Added local database layer ensuring daily usage is strictly monotonic. Once minutes are verified, they are stored locally and can mathematically never shrink or drop throughout the day, even if the OS purges memory or lags disk flushes.
+  - **Automatic Midnight Rollover & Auto-Prune:** Automatically rolls over high-water marks at 00:00:00 midnight using date keys (`YYYY-MM-DD`), and auto-purges data older than 7 days.
+  - **Service Resuscitation on Unlock (`ACTION_USER_PRESENT`):** Registered unlock listener in `BootReceiver` and manifest so `UsageMonitorService` immediately restarts if killed by aggressive OEM battery managers during sleep.
+
+### v1.5.5 — 2026-10-25
+* **Commit:** `3b21ef5`
 * **Type:** Patch / Daily Usage Truncation Fix
 * **Summary:**
   - **Eviction-Proof Daily Usage Merge:** Fixed bug where Android's in-memory `UsageEvents` ring buffer, which automatically evicts morning events as phone activity accumulates throughout the day, caused Instagram to under-report (e.g. 45m instead of 2h+).
