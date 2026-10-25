@@ -75,27 +75,27 @@ val LightNeuColors = NeuColors(
     errorRed = Color(0xFFE11D48)
 )
 
-// --- DARK OBSIDIAN (Deep Soft UI) ---
+// --- DARK OBSIDIAN (Lighter Surfaces with Pure Dark Shadows, Zero White Shadows) ---
 val DarkNeuColors = NeuColors(
     isDark = true,
-    background = Color(0xFF181C24),      // Deep Charcoal Slate canvas
-    surface = Color(0xFF1E232C),         // Raised Obsidian Soft UI surface
-    surfaceSunken = Color(0xFF13161C),   // Recessed sunken cavity
-    shadowLight = Color(0x1EFFFFFF),     // Specular top-left light
-    shadowDark = Color(0x90090C11),      // Deep occlusion bottom-right shadow
-    innerShadowTop = Color(0xA505070A),  // 65% deep black top/left inner shadow
-    innerShadowBottom = Color(0x18FFFFFF), // Soft glimmer bottom/right inner floor
+    background = Color(0xFF131720),      // Deep Charcoal Slate canvas
+    surface = Color(0xFF202633),         // Lighter surface overall (natural layer elevation)
+    surfaceSunken = Color(0xFF141821),   // Recessed sunken cavity (darker than card surface)
+    shadowLight = Color.Transparent,     // ZERO white shadow in opposite corner!
+    shadowDark = Color(0x99000000),      // Pure dark shadow, darker than the card as normal
+    innerShadowTop = Color(0x80000000),  // Natural dark inner shadow for deboss
+    innerShadowBottom = Color.Transparent, // ZERO white glare
     bevelBorder = Brush.linearGradient(
         colors = listOf(
-            Color(0x258FA3BF), // Top-left subtle specular edge
-            Color(0x50000000)  // Bottom-right dark shadow edge
+            Color(0x22FFFFFF), // Subtle top-left hairline rim
+            Color(0x08FFFFFF)  // Faint bottom-right rim
         )
     ),
     insetBevelBorder = Brush.linearGradient(
         colors = listOf(
-            Color(0x75000000), // Top-left deep crease
+            Color(0x50000000), // Top-left inner shadow crease
             Color(0x20000000),
-            Color(0x15FFFFFF)  // Bottom-right faint ambient bounce
+            Color.Transparent  // Zero white in opposite corner
         ),
         start = androidx.compose.ui.geometry.Offset(0f, 0f),
         end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
@@ -104,7 +104,7 @@ val DarkNeuColors = NeuColors(
     textSecondary = Color(0xFF94A3B8),   // Slate 400
     textMuted = Color(0xFF64748B),       // Slate 500
     textOnEmerald = Color(0xFFFFFFFF),
-    track = Color(0xFF111419),
+    track = Color(0xFF10131A),
     emeraldPrimary = Color(0xFF10B981),   // Glowing Neon Emerald
     emeraldDark = Color(0xFF34D399),      // Mint accent for high readability on dark
     emeraldLight = Color(0xFF6EE7B7),

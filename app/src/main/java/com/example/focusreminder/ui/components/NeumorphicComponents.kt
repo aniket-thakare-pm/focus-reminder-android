@@ -78,25 +78,29 @@ fun NeuCard(
 
         drawIntoCanvas { canvas ->
             if (!isInset) {
-                // Top-left light shadow (-offsetPx, -offsetPx)
-                val paintLight = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = neu.shadowLight.toArgb()
-                    maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                // Top-left light shadow (Light Mode only; ZERO white shadow in Dark Mode)
+                if (neu.shadowLight != Color.Transparent && neu.shadowLight.alpha > 0.01f) {
+                    val paintLight = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                        color = neu.shadowLight.toArgb()
+                        maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                    }
+                    canvas.nativeCanvas.drawRoundRect(
+                        -offsetPx, -offsetPx, size.width - offsetPx, size.height - offsetPx,
+                        r, r, paintLight
+                    )
                 }
-                canvas.nativeCanvas.drawRoundRect(
-                    -offsetPx, -offsetPx, size.width - offsetPx, size.height - offsetPx,
-                    r, r, paintLight
-                )
 
-                // Bottom-right dark shadow (+offsetPx, +offsetPx)
-                val paintDark = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = neu.shadowDark.toArgb()
-                    maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                // Bottom-right dark shadow: darker than the card color as normal
+                if (neu.shadowDark != Color.Transparent && neu.shadowDark.alpha > 0.01f) {
+                    val paintDark = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                        color = neu.shadowDark.toArgb()
+                        maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                    }
+                    canvas.nativeCanvas.drawRoundRect(
+                        offsetPx, offsetPx, size.width + offsetPx, size.height + offsetPx,
+                        r, r, paintDark
+                    )
                 }
-                canvas.nativeCanvas.drawRoundRect(
-                    offsetPx, offsetPx, size.width + offsetPx, size.height + offsetPx,
-                    r, r, paintDark
-                )
             }
         }
     }
@@ -200,33 +204,35 @@ fun NeuInsetWell(
                 size = size
             )
 
-            // 3. Bottom inner reflection (ambient light bounces onto inner floor)
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        neu.innerShadowBottom.copy(alpha = neu.innerShadowBottom.alpha * 0.4f),
-                        neu.innerShadowBottom
+            // 3. Bottom inner reflection (Light Mode ambient bounce only; ZERO white shadow in Dark Mode)
+            if (neu.innerShadowBottom != Color.Transparent && neu.innerShadowBottom.alpha > 0.01f) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            neu.innerShadowBottom.copy(alpha = neu.innerShadowBottom.alpha * 0.4f),
+                            neu.innerShadowBottom
+                        ),
+                        startY = (h - depth * 0.75f).coerceAtLeast(0f),
+                        endY = h
                     ),
-                    startY = (h - depth * 0.75f).coerceAtLeast(0f),
-                    endY = h
-                ),
-                size = size
-            )
+                    size = size
+                )
 
-            // 4. Right inner reflection (ambient light bounces onto inner right floor)
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        neu.innerShadowBottom.copy(alpha = neu.innerShadowBottom.alpha * 0.4f),
-                        neu.innerShadowBottom
+                // 4. Right inner reflection
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            neu.innerShadowBottom.copy(alpha = neu.innerShadowBottom.alpha * 0.4f),
+                            neu.innerShadowBottom
+                        ),
+                        startX = (w - depth * 0.75f).coerceAtLeast(0f),
+                        endX = w
                     ),
-                    startX = (w - depth * 0.75f).coerceAtLeast(0f),
-                    endX = w
-                ),
-                size = size
-            )
+                    size = size
+                )
+            }
         }
         .border(
             width = 0.9.dp,
@@ -468,23 +474,29 @@ fun NeuCircle(
             )
         } else {
             drawIntoCanvas { canvas ->
-                val paintLight = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = neu.shadowLight.toArgb()
-                    maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                // Top-left light shadow (Light Mode only; ZERO white shadow in Dark Mode)
+                if (neu.shadowLight != Color.Transparent && neu.shadowLight.alpha > 0.01f) {
+                    val paintLight = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                        color = neu.shadowLight.toArgb()
+                        maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                    }
+                    canvas.nativeCanvas.drawCircle(
+                        size.width / 2f - offsetPx, size.height / 2f - offsetPx,
+                        size.minDimension / 2f, paintLight
+                    )
                 }
-                canvas.nativeCanvas.drawCircle(
-                    size.width / 2f - offsetPx, size.height / 2f - offsetPx,
-                    size.minDimension / 2f, paintLight
-                )
 
-                val paintDark = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = neu.shadowDark.toArgb()
-                    maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                // Dark shadow (+offsetPx, +offsetPx) - darker than the card as normal
+                if (neu.shadowDark != Color.Transparent && neu.shadowDark.alpha > 0.01f) {
+                    val paintDark = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                        color = neu.shadowDark.toArgb()
+                        maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                    }
+                    canvas.nativeCanvas.drawCircle(
+                        size.width / 2f + offsetPx, size.height / 2f + offsetPx,
+                        size.minDimension / 2f, paintDark
+                    )
                 }
-                canvas.nativeCanvas.drawCircle(
-                    size.width / 2f + offsetPx, size.height / 2f + offsetPx,
-                    size.minDimension / 2f, paintDark
-                )
             }
         }
     }

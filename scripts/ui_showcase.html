@@ -26,16 +26,31 @@
   }
 
   .dark-mode {
-    --bg-neu: #181C24 !important;
-    --neu-surface: #1E232C !important;
-    --neu-surface-sunken: #13161C !important;
-    --neu-shadow-dark: #090C11 !important;
-    --neu-shadow-light: rgba(255, 255, 255, 0.12) !important;
-    --neu-inner-dark: rgba(5, 7, 10, 0.75) !important;
-    --neu-inner-light: rgba(255, 255, 255, 0.08) !important;
+    --bg-neu: #131720 !important;
+    --neu-surface: #202633 !important;
+    --neu-surface-sunken: #141821 !important;
+    --neu-shadow-dark: rgba(0, 0, 0, 0.65) !important;
+    --neu-shadow-light: transparent !important;
+    --neu-inner-dark: rgba(0, 0, 0, 0.55) !important;
+    --neu-inner-light: transparent !important;
     --neu-emerald: #10B981 !important;
     --neu-emerald-dark: #34D399 !important;
     color: #F1F5F9 !important;
+  }
+
+  .dark-mode .neu-card,
+  .dark-mode .neu-card-sm,
+  .dark-mode .neu-circle,
+  .dark-mode .neu-btn {
+    box-shadow: 4px 6px 16px var(--neu-shadow-dark) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .dark-mode .neu-inset,
+  .dark-mode .neu-inset-sm,
+  .dark-mode .neu-inset-circle {
+    box-shadow: inset 3px 3px 8px var(--neu-inner-dark) !important;
+    border: 1px solid rgba(0, 0, 0, 0.35) !important;
   }
 
   body {
