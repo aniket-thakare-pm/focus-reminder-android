@@ -1,0 +1,293 @@
+package com.example.focusreminder.ui.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.dp
+
+/**
+ * Minimalist Vector Icons for the Bottom Navigation Bar (Zero Emojis).
+ */
+
+@Composable
+fun NavTimerIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 2.dp.toPx()
+        val cx = size.width / 2f
+        val cy = size.height / 2f + 1.5.dp.toPx()
+        val radius = size.minDimension / 2.5f
+
+        // Top stem & button
+        drawLine(
+            color = color,
+            start = Offset(cx, cy - radius),
+            end = Offset(cx, cy - radius - 3.dp.toPx()),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(cx - 3.dp.toPx(), cy - radius - 3.dp.toPx()),
+            end = Offset(cx + 3.dp.toPx(), cy - radius - 3.dp.toPx()),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+
+        // Watch circular ring
+        drawCircle(
+            color = color,
+            center = Offset(cx, cy),
+            radius = radius,
+            style = Stroke(width = strokeWidth)
+        )
+
+        // Watch hands (showing 10:10)
+        drawLine(
+            color = color,
+            start = Offset(cx, cy),
+            end = Offset(cx, cy - radius * 0.55f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(cx, cy),
+            end = Offset(cx + radius * 0.45f, cy),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun NavAppsIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 1.8.dp.toPx()
+        val boxSize = size.width * 0.36f
+        val gap = size.width * 0.14f
+        val startX = (size.width - (boxSize * 2 + gap)) / 2f
+        val startY = (size.height - (boxSize * 2 + gap)) / 2f
+        val corner = 3.dp.toPx()
+
+        val positions = listOf(
+            Offset(startX, startY),
+            Offset(startX + boxSize + gap, startY),
+            Offset(startX, startY + boxSize + gap),
+            Offset(startX + boxSize + gap, startY + boxSize + gap)
+        )
+
+        positions.forEach { pos ->
+            drawRoundRect(
+                color = color,
+                topLeft = pos,
+                size = Size(boxSize, boxSize),
+                cornerRadius = CornerRadius(corner, corner),
+                style = Stroke(width = strokeWidth)
+            )
+        }
+    }
+}
+
+@Composable
+fun NavAlertsIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 2.dp.toPx()
+        val cx = size.width / 2f
+        val path = Path().apply {
+            // Bell dome
+            moveTo(cx, size.height * 0.16f)
+            cubicTo(
+                cx + size.width * 0.32f, size.height * 0.22f,
+                cx + size.width * 0.36f, size.height * 0.58f,
+                cx + size.width * 0.44f, size.height * 0.72f
+            )
+            lineTo(cx - size.width * 0.44f, size.height * 0.72f)
+            cubicTo(
+                cx - size.width * 0.36f, size.height * 0.58f,
+                cx - size.width * 0.32f, size.height * 0.22f,
+                cx, size.height * 0.16f
+            )
+            close()
+        }
+
+        drawPath(path = path, color = color, style = Stroke(width = strokeWidth, cap = StrokeCap.Round))
+
+        // Clapper at bottom
+        drawLine(
+            color = color,
+            start = Offset(cx - 2.5.dp.toPx(), size.height * 0.82f),
+            end = Offset(cx + 2.5.dp.toPx(), size.height * 0.82f),
+            strokeWidth = strokeWidth * 1.2f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+fun NavJournalIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 1.8.dp.toPx()
+        val w = size.width * 0.72f
+        val h = size.height * 0.82f
+        val x = (size.width - w) / 2f
+        val y = (size.height - h) / 2f
+
+        // Document / Notebook body
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(x, y),
+            size = Size(w, h),
+            cornerRadius = CornerRadius(3.5.dp.toPx(), 3.5.dp.toPx()),
+            style = Stroke(width = strokeWidth)
+        )
+
+        // Internal note lines
+        val lineMargin = w * 0.22f
+        val lineStartX = x + lineMargin
+        val lineEndX = x + w - lineMargin
+        val lineSpacing = h * 0.22f
+
+        for (i in 1..3) {
+            val lineY = y + h * 0.26f + (i - 1) * lineSpacing
+            drawLine(
+                color = color,
+                start = Offset(lineStartX, lineY),
+                end = Offset(if (i == 3) lineStartX + (lineEndX - lineStartX) * 0.6f else lineEndX, lineY),
+                strokeWidth = 1.6.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+/**
+ * Minimalist Vector Lock Icon for Task Locks & Security (Zero Emojis).
+ */
+@Composable
+fun SimpleLockIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(18.dp),
+    isLocked: Boolean = true
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 2.dp.toPx()
+        val w = size.width
+        val h = size.height
+
+        val bodyW = w * 0.76f
+        val bodyH = h * 0.50f
+        val bodyX = (w - bodyW) / 2f
+        val bodyY = h * 0.44f
+        val corner = 3.dp.toPx()
+
+        // Shackle arch
+        val shackleRadius = bodyW * 0.30f
+        val shackleCx = w / 2f
+        val shackleBottomY = bodyY
+
+        val shacklePath = Path().apply {
+            if (isLocked) {
+                moveTo(shackleCx - shackleRadius, shackleBottomY)
+                lineTo(shackleCx - shackleRadius, h * 0.24f)
+                cubicTo(
+                    shackleCx - shackleRadius, h * 0.06f,
+                    shackleCx + shackleRadius, h * 0.06f,
+                    shackleCx + shackleRadius, h * 0.24f
+                )
+                lineTo(shackleCx + shackleRadius, shackleBottomY)
+            } else {
+                // Open shackle (turned slightly up)
+                moveTo(shackleCx - shackleRadius, shackleBottomY)
+                lineTo(shackleCx - shackleRadius, h * 0.16f)
+                cubicTo(
+                    shackleCx - shackleRadius, h * 0.02f,
+                    shackleCx + shackleRadius, h * 0.02f,
+                    shackleCx + shackleRadius, h * 0.16f
+                )
+                lineTo(shackleCx + shackleRadius, h * 0.24f)
+            }
+        }
+        drawPath(shacklePath, color = color, style = Stroke(width = strokeWidth, cap = StrokeCap.Round))
+
+        // Lock Body
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(bodyX, bodyY),
+            size = Size(bodyW, bodyH),
+            cornerRadius = CornerRadius(corner, corner),
+            style = Stroke(width = strokeWidth)
+        )
+
+        // Center Keyhole dot & stem
+        drawCircle(
+            color = color,
+            center = Offset(w / 2f, bodyY + bodyH * 0.42f),
+            radius = 1.8.dp.toPx()
+        )
+        drawLine(
+            color = color,
+            start = Offset(w / 2f, bodyY + bodyH * 0.46f),
+            end = Offset(w / 2f, bodyY + bodyH * 0.72f),
+            strokeWidth = strokeWidth * 0.85f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+/**
+ * Clean Vector Magnifying Glass Search Icon (Zero Emojis).
+ */
+@Composable
+fun SearchVectorIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(16.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 1.8.dp.toPx()
+        val r = size.minDimension * 0.32f
+        val cx = size.width * 0.40f
+        val cy = size.height * 0.40f
+
+        drawCircle(
+            color = color,
+            center = Offset(cx, cy),
+            radius = r,
+            style = Stroke(width = strokeWidth)
+        )
+
+        // Handle
+        val cos45 = 0.7071f
+        val startX = cx + r * cos45
+        val startY = cy + r * cos45
+        val endX = size.width * 0.88f
+        val endY = size.height * 0.88f
+
+        drawLine(
+            color = color,
+            start = Offset(startX, startY),
+            end = Offset(endX, endY),
+            strokeWidth = strokeWidth * 1.2f,
+            cap = StrokeCap.Round
+        )
+    }
+}

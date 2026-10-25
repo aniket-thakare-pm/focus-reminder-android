@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus &amp; Reminder — Pure Neumorphism (Soft UI)</title>
+<script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+<style>
+  /* ================= PURE NEUMORPHIC (SOFT UI) SPECIFICATION =================
+     Matches exact user spec:
+     border-radius: 12-16px, box-shadow: -5px -5px 15px, 5px 5px 15px
+     Solid surface: #E0E5EC (No gradients)
+     Text: Deep Slate #1E293B (No washed out white)
+     Navigation: Pure Vector Icons ONLY (Zero Emojis)
+  ============================================================================= */
+  :root {
+    --bg-neu: #E0E5EC;
+    --neu-shadow-dark: #9BAAC0;
+    --neu-shadow-light: #FFFFFF;
+    --neu-emerald: #059669;
+    --neu-emerald-dark: #047857;
+  }
+
+  body {
+    background-color: #CBD5E1;
+    color: #1E293B;
+  }
+
+  /* Raised Extruded Neumorphic Surfaces (Exact CSS) */
+  .neu-card {
+    background-color: #E0E5EC;
+    border-radius: 16px;
+    box-shadow: 5px 5px 15px var(--neu-shadow-dark), -5px -5px 15px var(--neu-shadow-light);
+  }
+
+  .neu-card-sm {
+    background-color: #E0E5EC;
+    border-radius: 12px;
+    box-shadow: 4px 4px 10px var(--neu-shadow-dark), -4px -4px 10px var(--neu-shadow-light);
+  }
+
+  .neu-circle {
+    background-color: #E0E5EC;
+    border-radius: 9999px;
+    box-shadow: 5px 5px 15px var(--neu-shadow-dark), -5px -5px 15px var(--neu-shadow-light);
+  }
+
+  /* Sunken Inset / Debossed Wells (Light from Top-Left: Inner shadow top & left; no fake white edge) */
+  .neu-inset {
+    background-color: #DCE2E9;
+    border-radius: 16px;
+    box-shadow: inset 3px 3px 7px rgba(112, 128, 150, 0.35);
+  }
+
+  .neu-inset-sm {
+    background-color: #DCE2E9;
+    border-radius: 12px;
+    box-shadow: inset 2px 2px 5px rgba(112, 128, 150, 0.32);
+  }
+
+  .neu-inset-circle {
+    background-color: #DCE2E9;
+    border-radius: 9999px;
+    box-shadow: inset 4px 4px 10px rgba(112, 128, 150, 0.35);
+  }
+
+  /* Interactive Neumorphic Buttons */
+  .neu-btn {
+    background-color: #E0E5EC;
+    border-radius: 14px;
+    box-shadow: 5px 5px 15px var(--neu-shadow-dark), -5px -5px 15px var(--neu-shadow-light);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .neu-btn:active, .neu-btn-active {
+    box-shadow: inset 4px 4px 10px var(--neu-shadow-dark), inset -4px -4px 10px var(--neu-shadow-light);
+    transform: scale(0.98);
+  }
+
+  /* Primary Emerald Pill */
+  .neu-btn-primary {
+    background-color: #059669;
+    border-radius: 14px;
+    box-shadow: 5px 5px 15px rgba(5, 150, 105, 0.35), -4px -4px 10px #FFFFFF;
+    color: #FFFFFF;
+    transition: all 0.15s ease;
+  }
+
+  .neu-btn-primary:active {
+    background-color: #047857;
+    box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.3), inset -3px -3px 6px rgba(255, 255, 255, 0.2);
+    transform: scale(0.98);
+  }
+
+  /* Toggle Switch (Like Reference Image 3) */
+  .neu-toggle-track {
+    background-color: #D3D9E2;
+    box-shadow: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  }
+
+  .neu-toggle-track-active {
+    background-color: #059669;
+    box-shadow: inset 3px 3px 6px rgba(4, 120, 87, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 0.3);
+  }
+
+  .neu-toggle-thumb {
+    background-color: #E0E5EC;
+    box-shadow: 2px 2px 5px rgba(155, 170, 192, 0.8), -2px -2px 4px #FFFFFF;
+  }
+
+  /* Custom Clean Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #9BAAC0; border-radius: 4px; }
+</style>
+</head>
+<body class="font-sans min-h-screen p-3 md:p-6 flex flex-col items-center justify-center">
+
+  <!-- TOP BAR & CONTROLS -->
+  <header class="w-full max-w-4xl mb-4 text-center">
+    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full neu-card-sm text-emerald-700 text-xs font-bold uppercase tracking-wider mb-2">
+      <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+      Pure Neumorphism (Soft UI) — APK Verified
+    </div>
+    <h1 class="text-2xl md:text-3xl font-black tracking-tight text-slate-800 mb-1">
+      Focus &amp; Reminder <span class="text-emerald-700">Soft UI Simulator</span>
+    </h1>
+    <p class="text-slate-600 text-xs max-w-xl mx-auto">
+      Zero emojis • Dual-directional shadows <code class="bg-slate-200 px-1 py-0.5 rounded text-[11px]">-5px -5px 15px / 5px 5px 15px</code> • Porcelain <code class="bg-slate-200 px-1 py-0.5 rounded text-[11px]">#E0E5EC</code>.
+    </p>
+
+    <!-- Top Mode Quick Switcher -->
+    <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
+      <span class="text-[11px] uppercase tracking-wider text-slate-500 font-bold mr-1">Preview Overlays:</span>
+      <button onclick="openOverlay('sticky')" class="px-4 py-2 rounded-2xl text-xs font-bold neu-btn text-emerald-700 hover:text-emerald-800 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        P0 Sticky Alert
+      </button>
+      <button onclick="openOverlay('blocker')" class="px-4 py-2 rounded-2xl text-xs font-bold neu-btn text-rose-700 hover:text-rose-800 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        Intentional Blocker
+      </button>
+      <button onclick="closeOverlay()" class="px-4 py-2 rounded-2xl text-xs font-bold neu-btn text-slate-700 hover:text-slate-900">
+        Return to App
+      </button>
+    </div>
+  </header>
+
+  <!-- PHONE CHASSIS (Neumorphic Off-White / Porcelain Surface #E0E5EC) -->
+  <div class="relative w-full max-w-[390px] h-[820px] bg-[#E0E5EC] rounded-[52px] shadow-[20px_20px_60px_#9baac0,-20px_-20px_60px_#ffffff] border-[6px] border-[#E0E5EC] overflow-hidden flex flex-col select-none">
+    
+    <!-- STATUS BAR -->
+    <div class="relative z-20 flex justify-between items-center px-6 pt-4 pb-1 text-slate-700 text-xs font-bold">
+      <span>09:41</span>
+      <!-- Soft Inset Dynamic Pill -->
+      <div class="px-3 py-1 rounded-full neu-inset-sm flex items-center justify-center gap-1.5">
+        <div class="w-2 h-2 rounded-full bg-emerald-600"></div>
+        <span class="text-[9px] text-emerald-800 font-extrabold tracking-wider">FOCUS ON</span>
+      </div>
+      <div class="flex items-center gap-1.5 text-[11px]">
+        <span>5G</span>
+        <div class="w-5 h-2.5 neu-inset-sm rounded-sm p-0.5 flex items-center">
+          <div class="w-full h-full bg-emerald-600 rounded-2xs"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN APP VIEW CONTAINER -->
+    <main class="relative z-10 flex-1 flex flex-col overflow-hidden">
+      
+      <!-- ================= TAB 1: DASHBOARD (SUNKEN NEUMORPHIC DIAL) ================= -->
+      <section id="tab-dashboard" class="tab-content relative z-10 flex-1 overflow-y-auto px-4 py-2 space-y-4">
+        
+        <!-- Header (Adaptive Width) -->
+        <div class="flex items-center justify-between pt-1">
+          <div class="min-w-0 flex-1 pr-2">
+            <span class="text-[11px] font-extrabold uppercase tracking-widest text-emerald-700">Daily Attention Pacing</span>
+            <h2 class="text-[28px] font-black text-slate-800 tracking-tight leading-none mt-0.5">Focus Dashboard</h2>
+          </div>
+          <button onclick="switchTab('apps')" class="px-3.5 py-2 rounded-2xl neu-btn text-xs font-bold text-emerald-700 flex items-center gap-1.5 whitespace-nowrap flex-shrink-0">
+            <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+            + Add App
+          </button>
+        </div>
+
+        <!-- HERO: DEBOSSED SUNKEN NEUMORPHIC TIMER DIAL (Modeled on Clock Reference) -->
+        <div class="neu-card p-6 text-center space-y-4">
+          <div class="flex items-center justify-between text-xs font-bold">
+            <span class="text-slate-500 uppercase tracking-wider text-[10px]">Daily Screen Budget</span>
+            <span class="text-emerald-700 font-mono font-bold">48m / 2h 00m</span>
+          </div>
+
+          <!-- Sunken Inset Circular Well -->
+          <div class="relative w-56 h-56 mx-auto neu-inset-circle flex items-center justify-center p-3">
+            <!-- Emerald Progress Ring -->
+            <svg class="absolute inset-0 w-full h-full transform -rotate-90 p-4">
+              <circle cx="96" cy="96" r="80" stroke="#CBD5E1" stroke-width="10" fill="none" />
+              <circle cx="96" cy="96" r="80" stroke="#059669" stroke-width="10" stroke-dasharray="502" stroke-dashoffset="160" stroke-linecap="round" fill="none" />
+            </svg>
+
+            <!-- Center Extruded Tactile Puck -->
+            <div class="w-36 h-36 rounded-full neu-circle flex flex-col items-center justify-center">
+              <span class="text-3xl font-black font-mono text-slate-800 tracking-tight">01:12</span>
+              <span class="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-700 mt-0.5">Remaining</span>
+              <span class="text-[10px] font-mono text-slate-500 mt-0.5 font-semibold">60% Available</span>
+            </div>
+          </div>
+
+          <!-- Inset Metrics Row -->
+          <div class="grid grid-cols-3 gap-2 pt-2">
+            <div class="p-2.5 rounded-2xl neu-inset-sm text-center">
+              <span class="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">Active Pacing</span>
+              <span class="text-xs font-black text-emerald-700">Balanced</span>
+            </div>
+            <div class="p-2.5 rounded-2xl neu-inset-sm text-center">
+              <span class="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">5m Sessions</span>
+              <span class="text-xs font-black text-slate-700 font-mono">3 Active</span>
+            </div>
+            <div class="p-2.5 rounded-2xl neu-inset-sm text-center">
+              <span class="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">Monitored</span>
+              <span class="text-xs font-black text-emerald-700 font-mono">3 Apps</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- MONITORED APPS CARDS (Golden Nesting Rule: Embossed Card with Debossed Inner Elements) -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-xs font-black uppercase tracking-wider text-slate-500">Monitored Apps &amp; Task Locks</span>
+            <button onclick="switchTab('apps')" class="text-xs text-emerald-700 font-bold hover:underline">Manage Limits &rarr;</button>
+          </div>
+
+          <!-- App 1: Instagram (53% usage -> Green) -->
+          <div class="neu-card p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3 min-w-0">
+                <!-- Debossed App Icon -->
+                <div class="w-12 h-12 rounded-2xl neu-inset flex items-center justify-center text-pink-700 font-black text-sm flex-shrink-0">
+                  IG
+                </div>
+                <div class="min-w-0">
+                  <h4 class="text-sm font-bold text-slate-800 truncate">Instagram</h4>
+                  <!-- Daily limit only (rolling time removed per spec) -->
+                  <span class="text-xs text-emerald-700 font-mono font-bold block truncate">48m / 1h 30m daily</span>
+                </div>
+              </div>
+              <!-- Debossed Lock Button (Clean Vector Icon, Zero Emojis, No Text!) -->
+              <button onclick="openOverlay('blocker')" title="Lock App" class="w-11 h-11 rounded-2xl neu-inset flex items-center justify-center text-emerald-700 hover:text-emerald-800 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              </button>
+            </div>
+            <!-- Debossed Daily Progress Bar: Spans from left of IG icon to right of Lock icon -->
+            <div class="w-full h-2 rounded-full neu-inset overflow-hidden p-0.5 flex items-center">
+              <div class="h-full bg-emerald-600 rounded-full transition-all" style="width: 53%;"></div>
+            </div>
+          </div>
+
+          <!-- App 2: YouTube (72% usage -> Yellow/Amber) -->
+          <div class="neu-card p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-12 h-12 rounded-2xl neu-inset flex items-center justify-center text-red-700 font-black text-sm flex-shrink-0">
+                  YT
+                </div>
+                <div class="min-w-0">
+                  <h4 class="text-sm font-bold text-slate-800 truncate">YouTube</h4>
+                  <span class="text-xs text-amber-700 font-mono font-bold block truncate">1h 26m / 2h 00m daily</span>
+                </div>
+              </div>
+              <button onclick="openOverlay('blocker')" title="Lock App" class="w-11 h-11 rounded-2xl neu-inset flex items-center justify-center text-emerald-700 hover:text-emerald-800 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              </button>
+            </div>
+            <!-- Progress Bar (72% -> Amber) -->
+            <div class="w-full h-2 rounded-full neu-inset overflow-hidden p-0.5 flex items-center">
+              <div class="h-full bg-amber-600 rounded-full transition-all" style="width: 72%;"></div>
+            </div>
+          </div>
+
+          <!-- App 3: Reddit (92% usage -> Red & Locked) -->
+          <div class="neu-card p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-12 h-12 rounded-2xl neu-inset flex items-center justify-center text-rose-700 font-black text-sm flex-shrink-0">
+                  <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <h4 class="text-sm font-bold text-slate-800 truncate">Reddit</h4>
+                    <span class="px-2 py-0.5 rounded-full neu-inset text-rose-700 text-[8px] font-black uppercase flex-shrink-0">LOCKED</span>
+                  </div>
+                  <span class="text-xs text-rose-600 font-mono font-bold block truncate">55m / 1h 00m daily</span>
+                </div>
+              </div>
+              <button onclick="openOverlay('blocker')" title="View Lock" class="w-11 h-11 rounded-2xl neu-inset flex items-center justify-center text-rose-700 hover:text-rose-800 flex-shrink-0">
+                <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              </button>
+            </div>
+            <!-- Progress Bar (92% -> Red) -->
+            <div class="w-full h-2 rounded-full neu-inset overflow-hidden p-0.5 flex items-center">
+              <div class="h-full bg-rose-600 rounded-full transition-all" style="width: 92%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- UPCOMING P0 STICKY ALERT CARD (Embossed Card with Debossed Action Pill) -->
+        <div class="neu-card p-4 flex items-center justify-between">
+          <div class="space-y-0.5 min-w-0 flex-1 pr-2">
+            <span class="text-[9px] font-black uppercase tracking-widest text-emerald-700 block truncate">Next P0 Sticky Alert • 09:45 AM</span>
+            <h4 class="text-sm font-black text-slate-800 truncate">Prepare Sprint Demo Deck</h4>
+            <p class="text-xs text-slate-500 truncate">Demands deliberate acknowledgement</p>
+          </div>
+          <!-- Debossed Action Pill inside Embossed Card -->
+          <button onclick="openOverlay('sticky')" class="px-3.5 py-2 rounded-2xl neu-inset text-xs font-bold text-emerald-700 whitespace-nowrap flex-shrink-0">
+            Preview &rarr;
+          </button>
+        </div>
+
+        <div class="h-24"></div>
+      </section>
+
+      <!-- ================= TAB 2: APPS SELECTION & PRESETS (FEATURE A) ================= -->
+      <section id="tab-apps" class="tab-content relative z-10 flex-1 overflow-y-auto px-4 py-2 space-y-4 hidden">
+        
+        <div class="pt-1">
+          <span class="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">Feature A: Budgeting</span>
+          <h2 class="text-2xl font-black text-slate-800 tracking-tight">Monitored Apps</h2>
+          <p class="text-xs text-slate-600 mt-0.5">Categorized user applications and quick distraction presets.</p>
+        </div>
+
+        <!-- Sunken Inset Search Bar (Like Reference Image 3) -->
+        <div class="neu-inset px-4 py-3 flex items-center gap-3">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" placeholder="Search Instagram, YouTube, Reddit..." class="bg-transparent text-xs text-slate-800 placeholder-slate-400 focus:outline-none w-full font-bold" />
+        </div>
+
+        <!-- Category Filter Buttons -->
+        <div class="grid grid-cols-3 gap-2.5 text-center text-xs">
+          <button class="py-2.5 rounded-2xl neu-btn-primary font-bold">User Apps</button>
+          <button class="py-2.5 rounded-2xl neu-btn text-slate-700 font-bold hover:text-slate-900">Presets</button>
+          <button class="py-2.5 rounded-2xl neu-btn text-slate-700 font-bold hover:text-slate-900">All Apps</button>
+        </div>
+
+        <!-- Quick Presets Strip -->
+        <div class="space-y-1.5">
+          <span class="text-[10px] text-slate-500 block font-bold uppercase tracking-wider">Tap to quick-add targets:</span>
+          <div class="flex gap-2 overflow-x-auto pb-1 text-xs">
+            <span class="px-3 py-1.5 rounded-2xl neu-btn text-emerald-700 font-bold whitespace-nowrap cursor-pointer flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              Instagram
+            </span>
+            <span class="px-3 py-1.5 rounded-2xl neu-btn text-emerald-700 font-bold whitespace-nowrap cursor-pointer flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+              YouTube
+            </span>
+            <span class="px-3 py-1.5 rounded-2xl neu-btn text-slate-700 font-bold whitespace-nowrap cursor-pointer">+ Reddit</span>
+            <span class="px-3 py-1.5 rounded-2xl neu-btn text-slate-700 font-bold whitespace-nowrap cursor-pointer">+ TikTok</span>
+            <span class="px-3 py-1.5 rounded-2xl neu-btn text-slate-700 font-bold whitespace-nowrap cursor-pointer">+ X</span>
+          </div>
+        </div>
+
+        <!-- Extruded App Cards with Neumorphic Toggles (Like Reference Image 3) -->
+        <div class="space-y-3">
+          <!-- App 1: Instagram -->
+          <div class="neu-card p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl neu-inset-sm flex items-center justify-center text-pink-700 font-black text-sm">IG</div>
+                <div>
+                  <h4 class="text-sm font-bold text-slate-800">Instagram</h4>
+                  <span class="text-xs text-slate-500 font-mono font-medium">Rolling: 30m • Daily: 1h 30m</span>
+                </div>
+              </div>
+              <div class="w-13 h-7 rounded-full neu-toggle-track-active p-1 flex items-center justify-end cursor-pointer">
+                <div class="w-5 h-5 rounded-full neu-toggle-thumb"></div>
+              </div>
+            </div>
+            <div class="pt-2 border-t border-slate-300/60 flex items-center justify-between">
+              <span class="text-[11px] text-slate-600 font-medium">Instant 30m Task Lock:</span>
+              <button onclick="openOverlay('blocker')" class="px-3 py-1.5 rounded-xl neu-btn text-[11px] font-extrabold text-emerald-700 flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                Lock Now
+              </button>
+            </div>
+          </div>
+
+          <!-- App 2: YouTube -->
+          <div class="neu-card p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl neu-inset-sm flex items-center justify-center text-red-700 font-black text-sm">YT</div>
+                <div>
+                  <h4 class="text-sm font-bold text-slate-800">YouTube</h4>
+                  <span class="text-xs text-slate-500 font-mono font-medium">Rolling: 30m • Daily: 2h 00m</span>
+                </div>
+              </div>
+              <div class="w-13 h-7 rounded-full neu-toggle-track-active p-1 flex items-center justify-end cursor-pointer">
+                <div class="w-5 h-5 rounded-full neu-toggle-thumb"></div>
+              </div>
+            </div>
+            <div class="pt-2 border-t border-slate-300/60 flex items-center justify-between">
+              <span class="text-[11px] text-slate-600 font-medium">Instant 30m Task Lock:</span>
+              <button onclick="openOverlay('blocker')" class="px-3 py-1.5 rounded-xl neu-btn text-[11px] font-extrabold text-emerald-700 flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                Lock Now
+              </button>
+            </div>
+          </div>
+
+          <!-- App 3: TikTok -->
+          <div class="neu-card p-4 flex items-center justify-between opacity-80">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-2xl neu-inset-sm flex items-center justify-center text-slate-600 font-black text-sm">TK</div>
+              <div>
+                <h4 class="text-sm font-bold text-slate-800">TikTok</h4>
+                <span class="text-xs text-slate-500">Unrestricted</span>
+              </div>
+            </div>
+            <div class="w-13 h-7 rounded-full neu-toggle-track p-1 flex items-center justify-start cursor-pointer">
+              <div class="w-5 h-5 rounded-full neu-toggle-thumb"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="h-24"></div>
+      </section>
+
+      <!-- ================= TAB 3: REMINDERS (FEATURES E & F) ================= -->
+      <section id="tab-reminders" class="tab-content relative z-10 flex-1 overflow-y-auto px-4 py-2 space-y-4 hidden">
+        <!-- Header with Adaptive Width and NO Text Wrapping Bug -->
+        <div class="flex items-center justify-between pt-1">
+          <div class="min-w-0 flex-1 pr-2">
+            <span class="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">Rich Reminders</span>
+            <h2 class="text-2xl font-black text-slate-800 tracking-tight">Scheduled Alerts</h2>
+          </div>
+          <!-- Clean, non-wrapping "+ New Alert" button -->
+          <button onclick="alert('Creating new reminder modal...')" class="px-3.5 py-2 rounded-2xl neu-btn text-xs font-bold text-emerald-700 whitespace-nowrap flex-shrink-0 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            New Alert
+          </button>
+        </div>
+
+        <div class="space-y-3">
+          <!-- P0 Alert -->
+          <div class="neu-card p-4 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-0.5 rounded-full neu-inset-sm text-emerald-800 text-[9px] font-black uppercase">P0 Sticky Takeover</span>
+              <span class="text-xs font-mono text-emerald-700 font-bold">09:45 AM</span>
+            </div>
+            <h4 class="text-base font-black text-slate-800">Prepare Sprint Demo Deck</h4>
+            <p class="text-xs text-slate-600">Demands deliberate acknowledgement • Sticks on screen until addressed</p>
+            <div class="pt-2 flex justify-end">
+              <button onclick="openOverlay('sticky')" class="px-3 py-1.5 rounded-xl neu-btn text-xs font-extrabold text-emerald-700">
+                Preview Sticky &rarr;
+              </button>
+            </div>
+          </div>
+
+          <!-- P1 Alert -->
+          <div class="neu-card p-4 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-0.5 rounded-full neu-inset-sm text-slate-600 text-[9px] font-bold uppercase">P1 Standard</span>
+              <span class="text-xs font-mono text-slate-700 font-bold">02:30 PM</span>
+            </div>
+            <h4 class="text-sm font-bold text-slate-800">Take Evening Walk</h4>
+            <p class="text-xs text-slate-500">Standard notification tray alert</p>
+          </div>
+        </div>
+
+        <div class="h-24"></div>
+      </section>
+
+      <!-- ================= TAB 4: JOURNAL (FEATURE D) ================= -->
+      <section id="tab-journal" class="tab-content relative z-10 flex-1 overflow-y-auto px-4 py-2 space-y-4 hidden">
+        <div class="pt-1">
+          <span class="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">Feature D: Local Reflections</span>
+          <h2 class="text-2xl font-black text-slate-800 tracking-tight">Emergency Journal</h2>
+          <p class="text-xs text-slate-600 mt-0.5">Past reflections recorded during intentional emergency overrides. 100% local.</p>
+        </div>
+
+        <div class="neu-card p-4 space-y-3">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-extrabold text-emerald-700">Instagram • 5m Override</span>
+            <span class="text-slate-500 font-mono text-[11px]">Yesterday 4:12 PM</span>
+          </div>
+          <span class="text-[11px] font-semibold text-slate-600 block">Task Stated:</span>
+          <!-- Debossed Inset Well for the User's Stated Task -->
+          <div class="neu-inset p-3.5 text-xs text-slate-800">
+            <p class="italic leading-relaxed">"Reply to Sarah regarding the flight tickets booking for next week."</p>
+          </div>
+          <p class="text-[10px] text-slate-500">Completed all 5 reflective questions before temporary override was granted.</p>
+        </div>
+
+        <div class="h-24"></div>
+      </section>
+
+      <!-- ================= NEUMORPHIC FLOATING BOTTOM NAV BAR (ICONS ONLY, NO EMOJIS) ================= -->
+      <nav class="absolute bottom-4 left-4 right-4 z-30">
+        <div class="neu-card rounded-[24px] p-2 flex items-center justify-around">
+          
+          <!-- Tab 1: Timer Icon -->
+          <button onclick="switchTab('dashboard')" id="nav-dashboard" title="Timer" class="nav-btn w-13 h-13 rounded-2xl flex items-center justify-center neu-inset text-emerald-700 transition-all">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </button>
+          
+          <!-- Tab 2: Apps Grid Icon -->
+          <button onclick="switchTab('apps')" id="nav-apps" title="Apps" class="nav-btn w-13 h-13 rounded-2xl flex items-center justify-center text-slate-500 hover:text-slate-800 transition-all">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+          </button>
+
+          <!-- Tab 3: Alerts Bell Icon -->
+          <button onclick="switchTab('reminders')" id="nav-reminders" title="Alerts" class="nav-btn w-13 h-13 rounded-2xl flex items-center justify-center text-slate-500 hover:text-slate-800 transition-all">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          </button>
+
+          <!-- Tab 4: Journal Book Icon -->
+          <button onclick="switchTab('journal')" id="nav-journal" title="Journal" class="nav-btn w-13 h-13 rounded-2xl flex items-center justify-center text-slate-500 hover:text-slate-800 transition-all">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          </button>
+        </div>
+      </nav>
+
+      <!-- ================= OVERLAY 1: INTENTIONAL BLOCKER (NEUMORPHIC) ================= -->
+      <div id="overlay-blocker" class="absolute inset-0 z-50 bg-[#E0E5EC] p-6 flex flex-col justify-between hidden select-none">
+        <div class="text-center pt-4">
+          <div class="w-16 h-16 mx-auto mb-3 rounded-2xl neu-card flex items-center justify-center text-rose-600">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <h2 class="text-2xl font-black text-slate-800 tracking-tight">Intentional Pause</h2>
+          <p class="text-xs text-slate-600 mt-1">Rolling 30m budget reached for <span class="text-emerald-700 font-black">Instagram</span></p>
+        </div>
+
+        <!-- Center Debossed Well for Cooldown Countdown -->
+        <div class="my-auto text-center space-y-4">
+          <div class="w-64 h-64 mx-auto rounded-full neu-inset-circle flex flex-col items-center justify-center p-4">
+            <div class="text-5xl font-black font-mono text-slate-800 tracking-tight">24:18</div>
+            <span class="text-[10px] uppercase tracking-widest text-emerald-700 font-extrabold mt-1">Minimum Cooldown</span>
+          </div>
+          <p class="text-xs text-slate-600 px-6 italic leading-relaxed">
+            "Your attention is your life. Take three slow breaths and step away."
+          </p>
+        </div>
+
+        <div class="space-y-3">
+          <button onclick="closeOverlay()" class="w-full py-4 px-4 rounded-2xl neu-btn text-slate-800 text-xs font-bold hover:text-slate-900">
+            Leave App &amp; Step Away
+          </button>
+          <button onclick="alert('Starting 5-question reflection flow...')" class="w-full py-3.5 px-4 rounded-2xl neu-btn-primary text-xs font-extrabold">
+            Reflective Emergency Access &rarr;
+          </button>
+        </div>
+      </div>
+
+      <!-- ================= OVERLAY 2: P0 STICKY ALERT (NEUMORPHIC) ================= -->
+      <div id="overlay-sticky" class="absolute inset-0 z-50 bg-[#E0E5EC] p-6 flex flex-col justify-between hidden select-none">
+        
+        <!-- Top Status Pill (Center Aligned) -->
+        <div class="pt-2 flex justify-center">
+          <div class="inline-flex items-center gap-2 px-5 py-2 rounded-full neu-card-sm text-xs font-black uppercase tracking-wider text-emerald-700">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping"></span>
+            P0 Critical Alert
+          </div>
+        </div>
+
+        <!-- Center Typography (Thick Big Title, Center Aligned, Embossed Neumorphic Timer) -->
+        <div class="my-auto space-y-5 text-center">
+          <!-- Big, Thick Title -->
+          <h2 class="text-4xl md:text-[46px] font-black text-slate-800 leading-[1.08] tracking-tight text-center px-1">
+            Prepare Sprint Demo Deck
+          </h2>
+
+          <!-- Clean Single-Sentence Description -->
+          <p class="text-sm md:text-[15px] text-slate-600 font-medium leading-relaxed max-w-xs mx-auto text-center">
+            Review sprint demo deck and finalize slides for team sync.
+          </p>
+
+          <!-- Tactile Embossed Neumorphic Timer Card (Dual Shadows -5px -5px 15px / 5px 5px 15px) -->
+          <div class="p-6 rounded-[28px] neu-card space-y-1 text-center">
+            <span class="block text-[11px] font-extrabold uppercase tracking-[0.2em] text-emerald-700">
+              Scheduled For
+            </span>
+            <div class="text-5xl md:text-6xl font-black font-mono text-slate-800 tracking-tight">
+              10:55 <span class="text-3xl text-emerald-700 font-bold">AM</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Controls: Slide to Acknowledge Slider & Snooze -->
+        <div class="space-y-3 pt-2">
+          
+          <!-- Slide to Acknowledge Interactive Track -->
+          <div id="slide-track" class="relative w-full h-16 rounded-[20px] neu-inset flex items-center p-1.5 overflow-hidden cursor-pointer select-none">
+            <!-- Dynamic Progressive Green Fill -->
+            <div id="slide-fill" class="absolute left-0 top-0 bottom-0 bg-emerald-600 rounded-[20px] transition-all" style="width: 56px;"></div>
+            
+            <!-- Centered Track Text -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span id="slide-text" class="text-xs md:text-sm font-extrabold tracking-wide text-slate-500 uppercase">Slide to Acknowledge &rarr;</span>
+            </div>
+
+            <!-- Draggable Knob -->
+            <div id="slide-knob" class="relative z-10 w-13 h-13 rounded-2xl bg-emerald-600 neu-card flex items-center justify-center text-white shadow-md cursor-grab active:cursor-grabbing transition-transform" style="transform: translateX(0px);">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          
+          <!-- Snooze Pills -->
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="closeOverlay()" class="py-3.5 px-4 rounded-2xl neu-btn text-slate-800 text-xs font-bold hover:text-slate-900">
+              Snooze 5m
+            </button>
+            <button onclick="closeOverlay()" class="py-3.5 px-4 rounded-2xl neu-btn text-slate-800 text-xs font-bold hover:text-slate-900">
+              Snooze 15m
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+  <script>
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.nav-btn').forEach(el => {
+        el.classList.remove('neu-inset', 'text-emerald-700');
+        el.classList.add('text-slate-500');
+      });
+
+      const activeTab = document.getElementById('tab-' + tabName);
+      if (activeTab) activeTab.classList.remove('hidden');
+
+      const activeNav = document.getElementById('nav-' + tabName);
+      if (activeNav) {
+        activeNav.classList.remove('text-slate-500');
+        activeNav.classList.add('neu-inset', 'text-emerald-700');
+      }
+    }
+
+    function openOverlay(name) {
+      closeOverlay();
+      const el = document.getElementById('overlay-' + name);
+      if (el) el.classList.remove('hidden');
+    }
+
+    function closeOverlay() {
+      const b = document.getElementById('overlay-blocker');
+      const s = document.getElementById('overlay-sticky');
+      if (b) b.classList.add('hidden');
+      if (s) s.classList.add('hidden');
+      resetSlider();
+    }
+
+    // ================= INTERACTIVE SLIDE-TO-ACKNOWLEDGE =================
+    const track = document.getElementById('slide-track');
+    const knob = document.getElementById('slide-knob');
+    const fill = document.getElementById('slide-fill');
+    const text = document.getElementById('slide-text');
+    let isDragging = false;
+    let startX = 0;
+
+    function resetSlider() {
+      if (knob && fill && text) {
+        knob.style.transition = 'transform 0.2s ease';
+        fill.style.transition = 'width 0.2s ease';
+        knob.style.transform = 'translateX(0px)';
+        fill.style.width = '56px';
+        text.style.color = '#64748b';
+        text.innerText = 'Slide to Acknowledge →';
+      }
+    }
+
+    if (knob && track) {
+      const getClientX = (e) => e.touches ? e.touches[0].clientX : e.clientX;
+
+      const onStart = (e) => {
+        isDragging = true;
+        startX = getClientX(e);
+        knob.style.transition = 'none';
+        fill.style.transition = 'none';
+      };
+
+      const onMove = (e) => {
+        if (!isDragging) return;
+        const delta = getClientX(e) - startX;
+        const maxDelta = track.clientWidth - knob.clientWidth - 12;
+        const clamped = Math.max(0, Math.min(delta, maxDelta));
+        knob.style.transform = `translateX(${clamped}px)`;
+        fill.style.width = `${clamped + knob.clientWidth + 6}px`;
+
+        if (clamped / maxDelta > 0.45) {
+          text.style.color = '#ffffff';
+        } else {
+          text.style.color = '#64748b';
+        }
+      };
+
+      const onEnd = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        const maxDelta = track.clientWidth - knob.clientWidth - 12;
+        const currentTransform = parseFloat(knob.style.transform.replace(/[^0-9.]/g, '') || '0');
+
+        if (currentTransform >= maxDelta * 0.78) {
+          knob.style.transition = 'transform 0.15s ease';
+          fill.style.transition = 'width 0.15s ease';
+          knob.style.transform = `translateX(${maxDelta}px)`;
+          fill.style.width = '100%';
+          text.innerText = '✓ Acknowledged!';
+          if (navigator.vibrate) navigator.vibrate(120);
+          setTimeout(() => {
+            closeOverlay();
+          }, 450);
+        } else {
+          resetSlider();
+        }
+      };
+
+      knob.addEventListener('mousedown', onStart);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onEnd);
+
+      knob.addEventListener('touchstart', onStart);
+      window.addEventListener('touchmove', onMove);
+      window.addEventListener('touchend', onEnd);
+    }
+  </script>
+</body>
+</html>
