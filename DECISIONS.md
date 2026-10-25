@@ -18,6 +18,7 @@
 | ADR-006 | Target Android OS Support Matrix | Accepted | Platform / Gradle |
 | ADR-007 | Full-Screen Reminder Fallback Presentation | Accepted | UI / Notifications |
 | ADR-008 | Daily Total App Limit (Cumulative Budget) | Accepted | Core Usage Engine |
+| ADR-009 | Session Contract, Live Chronometer & Cooldown | Accepted | UX / Focus Enforcement |
 
 ---
 
@@ -104,3 +105,17 @@
 - **Consequences:** Usage engine will maintain dual accounting:
   1. `TrailingHourUsageCalculator` (rolling 60-minute window).
   2. `DailyTotalUsageCalculator` (midnight-to-midnight cumulative accumulator with a daily midnight reset alarm).
+
+---
+
+## ADR-009: Session Contract, Live Chronometer & Cooldown
+
+- **Context:** When opening a restricted app, users can mindlessly browse past their intended window without awareness, and scrolling within an app does not emit new activity transition events.
+- **Decision:**
+  1. **Entry Contract Pop-up:** Upon opening a restricted app, a full-screen `SessionContractActivity` appears requiring the user to drag a Neumorphic `NeuSlideToAcknowledge` slider ("Slide to Understand") with haptic feedback before entry is permitted.
+  2. **Configurable Session & Mandatory Cooldown:** Users configure allowed session duration (e.g. 10m) and mandatory cooldown wait time (e.g. 30m) instead of abstract window math. Window = Session + Cooldown.
+  3. **Live Status Bar Chronometer:** An ongoing low-priority notification with Android's native `setUsesChronometer(true)` and `setChronometerCountDown(true)` renders a live, ticking countdown in the status bar and shade.
+  4. **2-Minute Heads-Up Warning:** A high-priority heads-up notification with sound and vibration warns the user 2 minutes before the session expires.
+  5. **Exact Lock & Grace Period:** At 00:00, the app locks immediately for the configured cooldown period. A 5-minute grace period applies to temporary app-switches or screen locks.
+- **Rationale:** Introduces intentional entry friction, continuous ambient time awareness without active polling battery drain, and guaranteed enforcement.
+- **Consequences:** Created `SessionContractActivity`, updated `UsageMonitorService` with active session tracking and notification channels, and updated `AppRestrictionRepository` to persist `cooldownMinutes`.

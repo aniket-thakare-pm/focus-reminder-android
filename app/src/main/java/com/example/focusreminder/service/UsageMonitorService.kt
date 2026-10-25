@@ -8,28 +8,39 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.focusreminder.MainActivity
 import com.example.focusreminder.domain.engine.CooldownManager
-import com.example.focusreminder.domain.engine.DailyUsageCalculator
 import com.example.focusreminder.domain.engine.RollingWindowUsageCalculator
 import com.example.focusreminder.platform.AppRestrictionRepository
 import com.example.focusreminder.platform.ForegroundAppDetector
 import com.example.focusreminder.platform.UsagePermissionHelper
 import com.example.focusreminder.ui.blocker.BlockerActivity
+import com.example.focusreminder.ui.session.SessionContractActivity
 import kotlinx.coroutines.*
 import java.util.Calendar
 
 /**
- * Foreground Service for continuous usage monitoring and focus enforcement (Prototype A).
+ * Foreground Service for continuous usage monitoring, active session chronometer, and focus enforcement.
  */
 class UsageMonitorService : ComponentActivityService() {
 
     companion object {
         const val CHANNEL_ID = "focus_monitor_service_channel"
         const val BLOCKER_CHANNEL_ID = "focus_blocker_urgent_channel"
+        const val CHRONOMETER_CHANNEL_ID = "focus_session_chronometer_channel"
+        const val WARNING_CHANNEL_ID = "focus_session_warning_channel"
+
         const val NOTIFICATION_ID = 9001
         const val BLOCKER_NOTIFICATION_ID = 8888
+        const val CHRONOMETER_NOTIFICATION_ID = 7777
+        const val WARNING_NOTIFICATION_ID = 6666
 
         const val ACTION_START_MONITORING = "com.productivity.focusreminder.ACTION_START"
         const val ACTION_STOP_MONITORING = "com.productivity.focusreminder.ACTION_STOP"
+        const val ACTION_START_SESSION = "com.productivity.focusreminder.ACTION_START_SESSION"
+
+        const val EXTRA_SESSION_PKG = "extra_session_pkg"
+        const val EXTRA_SESSION_NAME = "extra_session_name"
+        const val EXTRA_SESSION_MINS = "extra_session_mins"
+        const val EXTRA_COOLDOWN_MINS = "extra_cooldown_mins"
 
         fun start(context: Context) {
             val intent = Intent(context, UsageMonitorService::class.java).apply {
@@ -52,6 +63,31 @@ class UsageMonitorService : ComponentActivityService() {
             }
             context.stopService(intent)
         }
+
+        fun startActiveSession(
+            context: Context,
+            packageName: String,
+            appName: String,
+            sessionMinutes: Int,
+            cooldownMinutes: Int
+        ) {
+            val intent = Intent(context, UsageMonitorService::class.java).apply {
+                action = ACTION_START_SESSION
+                putExtra(EXTRA_SESSION_PKG, packageName)
+                putExtra(EXTRA_SESSION_NAME, appName)
+                putExtra(EXTRA_SESSION_MINS, sessionMinutes)
+                putExtra(EXTRA_COOLDOWN_MINS, cooldownMinutes)
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -59,11 +95,20 @@ class UsageMonitorService : ComponentActivityService() {
 
     private lateinit var detector: ForegroundAppDetector
     private lateinit var repo: AppRestrictionRepository
-    private val rollingCalculator = RollingWindowUsageCalculator()
-    private val cooldownManager = CooldownManager()
 
     private var lastBlockedPackage: String? = null
     private var lastBlockedTimeMs: Long = 0L
+
+    // Active Focus Session State
+    private var activeSessionPackage: String? = null
+    private var activeSessionAppName: String? = null
+    private var activeSessionEndTimeMs: Long = 0L
+    private var activeCooldownMinutes: Int = 30
+    private var hasFiredTwoMinWarning: Boolean = false
+    private var lastSeenActiveTimeMs: Long = 0L
+
+    private var lastContractPackage: String? = null
+    private var lastContractTimeMs: Long = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -78,6 +123,27 @@ class UsageMonitorService : ComponentActivityService() {
                 stopMonitoring()
                 stopSelf()
             }
+            ACTION_START_SESSION -> {
+                val pkg = intent.getStringExtra(EXTRA_SESSION_PKG)
+                val name = intent.getStringExtra(EXTRA_SESSION_NAME) ?: "App"
+                val sessionMins = intent.getIntExtra(EXTRA_SESSION_MINS, 10)
+                val cooldownMins = intent.getIntExtra(EXTRA_COOLDOWN_MINS, 30)
+
+                if (pkg != null) {
+                    val now = System.currentTimeMillis()
+                    activeSessionPackage = pkg
+                    activeSessionAppName = name
+                    activeSessionEndTimeMs = now + (sessionMins * 60 * 1000L)
+                    activeCooldownMinutes = cooldownMins
+                    hasFiredTwoMinWarning = false
+                    lastSeenActiveTimeMs = now
+
+                    showLiveChronometerNotification(name, activeSessionEndTimeMs)
+                }
+
+                startForeground(NOTIFICATION_ID, buildForegroundNotification())
+                startMonitoringLoop()
+            }
             else -> {
                 startForeground(NOTIFICATION_ID, buildForegroundNotification())
                 startMonitoringLoop()
@@ -91,7 +157,7 @@ class UsageMonitorService : ComponentActivityService() {
 
         monitoringJob = serviceScope.launch {
             while (isActive) {
-                delay(1500L) // Poll every 1.5 seconds
+                delay(1200L) // Poll every 1.2 seconds for snappy response
 
                 if (!UsagePermissionHelper.hasUsageAccessPermission(this@UsageMonitorService)) {
                     continue
@@ -105,12 +171,50 @@ class UsageMonitorService : ComponentActivityService() {
                 }
 
                 val restrictedPackages = repo.getRestrictedPackages()
+                val now = System.currentTimeMillis()
 
-                // Check if foreground app is restricted
+                // Check active session status
+                val activePkg = activeSessionPackage
+                if (activePkg != null) {
+                    if (currentApp == activePkg) {
+                        lastSeenActiveTimeMs = now
+
+                        // Check 2-Minute Warning Alert
+                        if (!hasFiredTwoMinWarning && (activeSessionEndTimeMs - now) <= (2 * 60 * 1000L) && (activeSessionEndTimeMs - now) > 0L) {
+                            hasFiredTwoMinWarning = true
+                            showTwoMinuteWarningNotification(activeSessionAppName ?: "App")
+                        }
+
+                        // Check Session Expiration (Hard Stop!)
+                        if (now >= activeSessionEndTimeMs) {
+                            val appLabel = activeSessionAppName ?: activePkg.substringAfterLast(".")
+                            val cooldownMin = activeCooldownMinutes
+
+                            // Enforce cooldown lock
+                            repo.lockApp(activePkg, appLabel, durationMinutes = cooldownMin)
+
+                            // Clear active session
+                            activeSessionPackage = null
+                            dismissChronometerNotification()
+
+                            lastBlockedPackage = activePkg
+                            lastBlockedTimeMs = now
+                            triggerBlocker(activePkg, appLabel, isDailyLimit = false, cooldownSeconds = cooldownMin * 60L)
+                            continue
+                        }
+                    } else {
+                        // User switched out or locked screen. Check 5-minute session grace period.
+                        if ((now - lastSeenActiveTimeMs) > (5 * 60 * 1000L)) {
+                            // User abandoned session for > 5 mins: close session cleanly
+                            activeSessionPackage = null
+                            dismissChronometerNotification()
+                        }
+                    }
+                }
+
+                // Check if newly foregrounded app is restricted
                 if (restrictedPackages.contains(currentApp)) {
-                    val now = System.currentTimeMillis()
-
-                    // 1. Check if user currently has an emergency override active
+                    // 1. Check emergency override
                     if (repo.hasActiveEmergencyOverride(currentApp)) {
                         continue
                     }
@@ -124,15 +228,12 @@ class UsageMonitorService : ComponentActivityService() {
                     val dailyUsedMs = detector.getDailyUsageMs(currentApp)
                     val isDailyExhausted = dailyBudgetMs > 0L && dailyUsedMs >= dailyBudgetMs
 
-                    // Calculate remaining seconds until midnight for daily lock
                     val nextMidnightMs = midnightStart + (24 * 60 * 60 * 1000L)
                     val secondsUntilMidnight = maxOf(60L, (nextMidnightMs - now) / 1000L)
 
-                    // 2. STRICT DAILY LIMIT ENFORCEMENT
+                    // 2. DAILY LIMIT ENFORCEMENT
                     if (isDailyExhausted) {
-                        // Lock app for the rest of the day until midnight
                         repo.lockApp(currentApp, appLabel, durationMinutes = (secondsUntilMidnight / 60).toInt())
-
                         if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
                             lastBlockedPackage = currentApp
                             lastBlockedTimeMs = now
@@ -141,7 +242,7 @@ class UsageMonitorService : ComponentActivityService() {
                         continue
                     }
 
-                    // 3. Check if under direct Task Lock / Manual Cooldown
+                    // 3. TASK LOCK / MANDATORY COOLDOWN ENFORCEMENT
                     if (repo.isAppLocked(currentApp)) {
                         val remainingSecs = repo.getRemainingLockSeconds(currentApp)
                         if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
@@ -152,26 +253,91 @@ class UsageMonitorService : ComponentActivityService() {
                         continue
                     }
 
-                    // 4. Check rolling continuous session budget (last 60 minutes)
-                    val rollingBudgetMinutes = repo.getRollingBudgetMinutes(currentApp)
-                    val rollingCalculator = RollingWindowUsageCalculator(budgetMs = rollingBudgetMinutes * 60 * 1000L)
-                    val windowStart = now - (60 * 60 * 1000L)
-                    val intervals = detector.queryForegroundIntervals(currentApp, windowStart, now)
+                    // 4. SESSION ENTRY CONTRACT: If not in active session, require user to slide to enter!
+                    if (activeSessionPackage != currentApp) {
+                        val sessionBudget = repo.getRollingBudgetMinutes(currentApp)
+                        val cooldown = repo.getCooldownMinutes(currentApp)
 
-                    val rollingResult = rollingCalculator.evaluate(intervals, now)
-                    if (rollingResult.isBudgetExhausted) {
-                        // Automatically lock for rolling cooldown (30m)
-                        repo.lockApp(currentApp, appLabel, durationMinutes = 30)
-                        if (currentApp != lastBlockedPackage || (now - lastBlockedTimeMs) >= 2000L) {
-                            lastBlockedPackage = currentApp
-                            lastBlockedTimeMs = now
-                            triggerBlocker(currentApp, appLabel, isDailyLimit = false, cooldownSeconds = 1800L)
+                        // Calculate remaining time in trailing window (sessionBudget + cooldown)
+                        val windowMs = (sessionBudget + cooldown) * 60 * 1000L
+                        val windowStart = now - windowMs
+                        val intervals = detector.queryForegroundIntervals(currentApp, windowStart, now)
+                        val usedInWindowMs = intervals.sumOf { it.overlapMs(windowStart, now) }
+                        val remainingMinutes = maxOf(1, ((sessionBudget * 60 * 1000L - usedInWindowMs) / (60 * 1000L)).toInt())
+
+                        // Debounce contract presentation
+                        if (currentApp != lastContractPackage || (now - lastContractTimeMs) >= 4000L) {
+                            lastContractPackage = currentApp
+                            lastContractTimeMs = now
+
+                            val contractIntent = SessionContractActivity.createIntent(
+                                context = this@UsageMonitorService,
+                                packageName = currentApp,
+                                appName = appLabel,
+                                sessionMinutes = remainingMinutes,
+                                cooldownMinutes = cooldown
+                            )
+
+                            if (UsagePermissionHelper.hasOverlayPermission(this@UsageMonitorService)) {
+                                try {
+                                    startActivity(contractIntent)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                            showFullScreenContractNotification(appLabel, contractIntent)
                         }
-                        continue
                     }
                 }
             }
         }
+    }
+
+    private fun showLiveChronometerNotification(appName: String, endTimeMs: Long) {
+        val launchIntent = packageManager.getLaunchIntentForPackage(activeSessionPackage ?: "")
+        val contentPendingIntent = launchIntent?.let {
+            PendingIntent.getActivity(
+                this,
+                777,
+                it,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        val builder = NotificationCompat.Builder(this, CHRONOMETER_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("$appName Focus Session")
+            .setContentText("Focus session ticking • Live countdown active")
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
+            .setWhen(endTimeMs)
+            .setShowWhen(true)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setColor(android.graphics.Color.parseColor("#059669")) // Emerald
+            .setContentIntent(contentPendingIntent)
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(CHRONOMETER_NOTIFICATION_ID, builder.build())
+    }
+
+    private fun showTwoMinuteWarningNotification(appName: String) {
+        val builder = NotificationCompat.Builder(this, WARNING_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("Warning: 2 Minutes Remaining ($appName)")
+            .setContentText("Wrap up your activity. $appName will lock in 2 minutes for cooldown.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_VIBRATE or NotificationCompat.DEFAULT_SOUND)
+            .setAutoCancel(true)
+            .setColor(android.graphics.Color.parseColor("#D97706")) // Amber
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(WARNING_NOTIFICATION_ID, builder.build())
+    }
+
+    private fun dismissChronometerNotification() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(CHRONOMETER_NOTIFICATION_ID)
     }
 
     private fun triggerBlocker(
@@ -187,7 +353,6 @@ class UsageMonitorService : ComponentActivityService() {
             cooldownSeconds = cooldownSeconds
         )
 
-        // If overlay permission is granted, start activity directly
         if (UsagePermissionHelper.hasOverlayPermission(this@UsageMonitorService)) {
             try {
                 startActivity(blockerIntent)
@@ -196,7 +361,6 @@ class UsageMonitorService : ComponentActivityService() {
             }
         }
 
-        // Post high-priority fullScreenIntent notification to ensure display across all Android versions
         showFullScreenBlockerNotification(appName, blockerIntent)
     }
 
@@ -211,7 +375,7 @@ class UsageMonitorService : ComponentActivityService() {
         val notification = NotificationCompat.Builder(this, BLOCKER_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentTitle("Focus Lock: $appName is Restricted")
-            .setContentText("Focus session active. Step away or reflect.")
+            .setContentText("Continuous budget exhausted. Step away or reflect.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setFullScreenIntent(pendingIntent, true)
@@ -222,9 +386,32 @@ class UsageMonitorService : ComponentActivityService() {
         manager.notify(BLOCKER_NOTIFICATION_ID, notification)
     }
 
+    private fun showFullScreenContractNotification(appName: String, contractIntent: Intent) {
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            9999,
+            contractIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, BLOCKER_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("Session Contract: $appName")
+            .setContentText("Slide to acknowledge focus window before entry.")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pendingIntent, true)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(9999, notification)
+    }
+
     private fun stopMonitoring() {
         monitoringJob?.cancel()
         monitoringJob = null
+        dismissChronometerNotification()
     }
 
     private fun getTodayMidnightMs(): Long {
@@ -238,6 +425,8 @@ class UsageMonitorService : ComponentActivityService() {
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
                 "Focus Enforcement Service",
@@ -252,14 +441,34 @@ class UsageMonitorService : ComponentActivityService() {
                 "Urgent Focus Restrictions",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Presents the lock screen when a restricted app is opened"
+                description = "Presents lock and session contracts when restricted apps are launched"
                 setBypassDnd(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
 
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val chronometerChannel = NotificationChannel(
+                CHRONOMETER_CHANNEL_ID,
+                "Live Focus Session Chronometer",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Live countdown timer during active app focus sessions"
+                setShowBadge(false)
+            }
+
+            val warningChannel = NotificationChannel(
+                WARNING_CHANNEL_ID,
+                "Session Expiry Warning",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Heads-up warning 2 minutes before app session budget ends"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+
             manager.createNotificationChannel(serviceChannel)
             manager.createNotificationChannel(blockerChannel)
+            manager.createNotificationChannel(chronometerChannel)
+            manager.createNotificationChannel(warningChannel)
         }
     }
 
@@ -283,6 +492,7 @@ class UsageMonitorService : ComponentActivityService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        dismissChronometerNotification()
         super.onDestroy()
     }
 }

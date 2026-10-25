@@ -14,7 +14,8 @@ data class InstalledAppInfo(
     val appName: String,
     val icon: Drawable? = null,
     val isRestricted: Boolean = false,
-    val rollingBudgetMinutes: Int = 30,
+    val rollingBudgetMinutes: Int = 15,
+    val cooldownMinutes: Int = 30,
     val dailyLimitMinutes: Int = 90,
     val isSystemApp: Boolean = false,
     val isLocked: Boolean = false,
@@ -54,6 +55,7 @@ class AppManager(private val context: Context) {
 
             val isRestricted = repo.isRestricted(pkg)
             val rolling = repo.getRollingBudgetMinutes(pkg)
+            val cooldown = repo.getCooldownMinutes(pkg)
             val daily = repo.getDailyLimitMinutes(pkg)
             val isLocked = repo.isAppLocked(pkg)
             val lockSecs = repo.getRemainingLockSeconds(pkg)
@@ -65,6 +67,7 @@ class AppManager(private val context: Context) {
                     icon = icon,
                     isRestricted = isRestricted,
                     rollingBudgetMinutes = rolling,
+                    cooldownMinutes = cooldown,
                     dailyLimitMinutes = daily,
                     isSystemApp = isSystem,
                     isLocked = isLocked,
@@ -90,6 +93,7 @@ class AppManager(private val context: Context) {
                         icon = icon,
                         isRestricted = true,
                         rollingBudgetMinutes = repo.getRollingBudgetMinutes(pkg),
+                        cooldownMinutes = repo.getCooldownMinutes(pkg),
                         dailyLimitMinutes = repo.getDailyLimitMinutes(pkg),
                         isSystemApp = false,
                         isLocked = repo.isAppLocked(pkg),

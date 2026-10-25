@@ -65,6 +65,16 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.FocusReminder" />
 
+        <!-- Feature B: Full-Screen Session Contract -->
+        <activity
+            android:name=".ui.session.SessionContractActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.FocusReminder" />
+
         <!-- Foreground Service for Usage Monitoring and Enforcement -->
         <service
             android:name=".service.UsageMonitorService"

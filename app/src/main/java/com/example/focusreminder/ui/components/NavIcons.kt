@@ -513,3 +513,45 @@ fun CalendarEventIcon(
         )
     }
 }
+
+/**
+ * Minimalist Vector Warning Triangle Icon (Zero Emojis).
+ */
+@Composable
+fun WarningTriangleIcon(
+    color: Color,
+    modifier: Modifier = Modifier.size(16.dp)
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val strokeWidth = 1.6.dp.toPx()
+
+        val trianglePath = Path().apply {
+            moveTo(w / 2f, h * 0.16f)
+            lineTo(w * 0.88f, h * 0.84f)
+            lineTo(w * 0.12f, h * 0.84f)
+            close()
+        }
+        drawPath(
+            path = trianglePath,
+            color = color,
+            style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        // Exclamation vertical line
+        drawLine(
+            color = color,
+            start = Offset(w / 2f, h * 0.40f),
+            end = Offset(w / 2f, h * 0.60f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        // Exclamation dot
+        drawCircle(
+            color = color,
+            center = Offset(w / 2f, h * 0.73f),
+            radius = strokeWidth * 0.7f
+        )
+    }
+}

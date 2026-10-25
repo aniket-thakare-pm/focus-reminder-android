@@ -30,6 +30,7 @@ class AppRestrictionRepository(context: Context) {
     companion object {
         private const val KEY_RESTRICTED_PACKAGES = "restricted_packages"
         private const val PREFIX_ROLLING = "rolling_min_"
+        private const val PREFIX_COOLDOWN = "cooldown_min_"
         private const val PREFIX_DAILY = "daily_min_"
         private const val PREFIX_LOCK_EXPIRY = "lock_expiry_"
         private const val PREFIX_APP_NAME = "app_name_"
@@ -81,18 +82,27 @@ class AppRestrictionRepository(context: Context) {
     }
 
     /**
-     * Set rolling and daily budget limits in minutes.
+     * Set session, cooldown, and daily budget limits in minutes.
      */
-    fun setLimits(packageName: String, rollingMinutes: Int, dailyMinutes: Int) {
+    fun setLimits(packageName: String, sessionMinutes: Int, cooldownMinutes: Int, dailyMinutes: Int) {
         prefs.edit()
-            .putInt(PREFIX_ROLLING + packageName, rollingMinutes)
+            .putInt(PREFIX_ROLLING + packageName, sessionMinutes)
+            .putInt(PREFIX_COOLDOWN + packageName, cooldownMinutes)
             .putInt(PREFIX_DAILY + packageName, dailyMinutes)
             .apply()
         notifyChange()
     }
 
+    fun setLimits(packageName: String, rollingMinutes: Int, dailyMinutes: Int) {
+        setLimits(packageName, rollingMinutes, getCooldownMinutes(packageName), dailyMinutes)
+    }
+
     fun getRollingBudgetMinutes(packageName: String): Int {
-        return prefs.getInt(PREFIX_ROLLING + packageName, 30)
+        return prefs.getInt(PREFIX_ROLLING + packageName, 15)
+    }
+
+    fun getCooldownMinutes(packageName: String): Int {
+        return prefs.getInt(PREFIX_COOLDOWN + packageName, 30)
     }
 
     fun getDailyLimitMinutes(packageName: String): Int {

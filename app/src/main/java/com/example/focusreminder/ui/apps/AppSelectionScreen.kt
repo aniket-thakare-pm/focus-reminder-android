@@ -3,6 +3,7 @@ package com.example.focusreminder.ui.apps
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -366,8 +367,8 @@ fun AppSelectionScreen(
         BudgetConfigDialog(
             app = app,
             onDismiss = { selectedAppForConfig = null },
-            onSave = { rollingBudget, dailyLimit ->
-                repo.setLimits(app.packageName, rollingBudget, dailyLimit)
+            onSave = { sessionMinutes, cooldownMinutes, dailyLimit ->
+                repo.setLimits(app.packageName, sessionMinutes, cooldownMinutes, dailyLimit)
                 selectedAppForConfig = null
             }
         )
@@ -456,7 +457,7 @@ fun ActiveAppRowItem(
                         Spacer(modifier = Modifier.height(2.dp))
                         val dailyStr = formatHoursMinutes(app.dailyLimitMinutes)
                         Text(
-                            text = "Rolling: ${app.rollingBudgetMinutes}m • Daily: $dailyStr",
+                            text = "Session: ${app.rollingBudgetMinutes}m • Wait: ${app.cooldownMinutes}m • Daily: $dailyStr",
                             fontSize = 11.sp,
                             color = EmeraldDark,
                             fontFamily = FontFamily.Monospace,
@@ -636,10 +637,11 @@ fun AllAppRowItem(
 fun BudgetConfigDialog(
     app: InstalledAppInfo,
     onDismiss: () -> Unit,
-    onSave: (Int, Int) -> Unit
+    onSave: (sessionMinutes: Int, cooldownMinutes: Int, dailyMinutes: Int) -> Unit
 ) {
-    var rollingBudget by remember { mutableFloatStateOf(app.rollingBudgetMinutes.toFloat()) }
-    var dailyLimit by remember { mutableFloatStateOf(app.dailyLimitMinutes.toFloat()) }
+    var sessionBudget by remember { mutableFloatStateOf(app.rollingBudgetMinutes.toFloat().coerceIn(5f, 60f)) }
+    var cooldownMinutes by remember { mutableFloatStateOf(app.cooldownMinutes.toFloat().coerceIn(15f, 120f)) }
+    var dailyLimit by remember { mutableFloatStateOf(app.dailyLimitMinutes.toFloat().coerceIn(30f, 360f)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -655,46 +657,104 @@ fun BudgetConfigDialog(
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = "Configure maximum continuous rolling usage and total daily screen budget.",
-                    color = TextSecondary,
-                    fontSize = 12.sp
-                )
-
-                // Rolling Window Slider
+                // Rule 1: Continuous Session Budget
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Continuous Session Budget", fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
-                        Text("${rollingBudget.toInt()} mins", fontSize = 12.sp, color = EmeraldDark, fontWeight = FontWeight.Black)
+                        Text("Session Duration", fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text("${sessionBudget.toInt()} mins", fontSize = 12.sp, color = EmeraldDark, fontWeight = FontWeight.Black)
                     }
                     Slider(
-                        value = rollingBudget,
-                        onValueChange = { rollingBudget = it },
-                        valueRange = 10f..60f,
-                        steps = 9,
+                        value = sessionBudget,
+                        onValueChange = { sessionBudget = it },
+                        valueRange = 5f..45f,
+                        steps = 7,
                         colors = SliderDefaults.colors(
                             thumbColor = EmeraldPrimary,
                             activeTrackColor = EmeraldPrimary,
                             inactiveTrackColor = NeuSunkenTrack
                         )
                     )
+                    // Quick chips for session
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(5, 10, 15, 20, 30).forEach { mins ->
+                            NeuInsetWell(
+                                modifier = Modifier.weight(1f).clickable { sessionBudget = mins.toFloat() },
+                                cornerRadius = 6.dp,
+                                backgroundColor = if (sessionBudget.toInt() == mins) EmeraldDark.copy(alpha = 0.2f) else null
+                            ) {
+                                Text(
+                                    text = "${mins}m",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (sessionBudget.toInt() == mins) FontWeight.Black else FontWeight.Normal,
+                                    color = if (sessionBudget.toInt() == mins) EmeraldDark else TextSecondary,
+                                    modifier = Modifier.padding(vertical = 4.dp).align(Alignment.Center)
+                                )
+                            }
+                        }
+                    }
                 }
 
-                // Daily Limit Slider
+                // Rule 2: Mandatory Cooldown
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Daily Total Allowance", fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text("Cooldown / Wait Time", fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text("${cooldownMinutes.toInt()} mins", fontSize = 12.sp, color = EmeraldDark, fontWeight = FontWeight.Black)
+                    }
+                    Slider(
+                        value = cooldownMinutes,
+                        onValueChange = { cooldownMinutes = it },
+                        valueRange = 15f..90f,
+                        steps = 4,
+                        colors = SliderDefaults.colors(
+                            thumbColor = EmeraldPrimary,
+                            activeTrackColor = EmeraldPrimary,
+                            inactiveTrackColor = NeuSunkenTrack
+                        )
+                    )
+                    // Quick chips for cooldown
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(15, 30, 45, 60).forEach { mins ->
+                            NeuInsetWell(
+                                modifier = Modifier.weight(1f).clickable { cooldownMinutes = mins.toFloat() },
+                                cornerRadius = 6.dp,
+                                backgroundColor = if (cooldownMinutes.toInt() == mins) EmeraldDark.copy(alpha = 0.2f) else null
+                            ) {
+                                Text(
+                                    text = "${mins}m",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (cooldownMinutes.toInt() == mins) FontWeight.Black else FontWeight.Normal,
+                                    color = if (cooldownMinutes.toInt() == mins) EmeraldDark else TextSecondary,
+                                    modifier = Modifier.padding(vertical = 4.dp).align(Alignment.Center)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Rule 3: Daily Total Limit
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Daily Limit", fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
                         val h = dailyLimit.toInt() / 60
                         val m = dailyLimit.toInt() % 60
-                        Text("${h}h ${m}m", fontSize = 12.sp, color = EmeraldDark, fontWeight = FontWeight.Black)
+                        Text("${h}h ${String.format("%02d", m)}m", fontSize = 12.sp, color = EmeraldDark, fontWeight = FontWeight.Black)
                     }
                     Slider(
                         value = dailyLimit,
@@ -708,10 +768,24 @@ fun BudgetConfigDialog(
                         )
                     )
                 }
+
+                // Summary Note
+                NeuInsetWell(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 10.dp
+                ) {
+                    Text(
+                        text = "Use for up to ${sessionBudget.toInt()}m, then locked for ${cooldownMinutes.toInt()}m. Full-screen entry contract and live chronometer timer will be active.",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(10.dp),
+                        lineHeight = 16.sp
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(rollingBudget.toInt(), dailyLimit.toInt()) }) {
+            TextButton(onClick = { onSave(sessionBudget.toInt(), cooldownMinutes.toInt(), dailyLimit.toInt()) }) {
                 Text("Save Changes", color = EmeraldDark, fontWeight = FontWeight.Black)
             }
         },
