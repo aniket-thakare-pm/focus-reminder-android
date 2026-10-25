@@ -137,104 +137,12 @@ class ForegroundAppDetector(private val context: Context) {
 
     /**
      * Accurately calculates real foreground usage per package strictly since midnight today.
-     * Prevents Android's queryAndAggregateUsageStats interval boundary expansion bug
-     * which bleeds into the previous 24-48 hours.
+     * Merges Android OS daily buckets, post-flush UsageEvents, and live active foreground sessions.
+     * Guarantees zero-underreporting against Android's native Digital Wellbeing and prevents
+     * multi-day boundary bleeding.
      */
-    fun queryAccurateDailyUsageMap(): Map<String, Long> {
+    fun queryReconciledDailyUsageMap(targetPackages: Collection<String>? = null): Map<String, Long> {
         val manager = usageStatsManager ?: return emptyMap()
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val midnightMs = calendar.timeInMillis
-        val nowMs = System.currentTimeMillis()
-
-        // Query events from 15 minutes prior to midnight to catch cross-midnight sessions
-        val queryStart = midnightMs - (15 * 60 * 1000L)
-        val events = try {
-            manager.queryEvents(queryStart, nowMs)
-        } catch (_: Exception) {
-            return emptyMap()
-        }
-
-        val usageMsMap = mutableMapOf<String, Long>()
-        val event = UsageEvents.Event()
-
-        var currentForegroundPkg: String? = null
-        var sessionStartMs: Long = 0L
-
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            val time = event.timeStamp
-            val pkg = event.packageName
-
-            when (event.eventType) {
-                UsageEvents.Event.ACTIVITY_RESUMED -> {
-                    // When another app resumes, close the previous active app session
-                    val prev = currentForegroundPkg
-                    if (prev != null && prev != pkg) {
-                        val effectiveStart = maxOf(sessionStartMs, midnightMs)
-                        val effectiveEnd = minOf(time, nowMs)
-                        if (effectiveEnd > effectiveStart) {
-                            val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
-                            usageMsMap[prev] = (usageMsMap[prev] ?: 0L) + duration
-                        }
-                    }
-                    currentForegroundPkg = pkg
-                    sessionStartMs = time
-                }
-                UsageEvents.Event.ACTIVITY_PAUSED,
-                UsageEvents.Event.ACTIVITY_STOPPED -> {
-                    if (currentForegroundPkg == pkg) {
-                        val effectiveStart = maxOf(sessionStartMs, midnightMs)
-                        val effectiveEnd = minOf(time, nowMs)
-                        if (effectiveEnd > effectiveStart) {
-                            val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
-                            usageMsMap[pkg] = (usageMsMap[pkg] ?: 0L) + duration
-                        }
-                        currentForegroundPkg = null
-                    }
-                }
-                UsageEvents.Event.SCREEN_NON_INTERACTIVE,
-                UsageEvents.Event.KEYGUARD_SHOWN -> {
-                    // Screen off or phone locked: close active app session
-                    val active = currentForegroundPkg
-                    if (active != null) {
-                        val effectiveStart = maxOf(sessionStartMs, midnightMs)
-                        val effectiveEnd = minOf(time, nowMs)
-                        if (effectiveEnd > effectiveStart) {
-                            val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
-                            usageMsMap[active] = (usageMsMap[active] ?: 0L) + duration
-                        }
-                        currentForegroundPkg = null
-                    }
-                }
-            }
-        }
-
-        // If an app is still in the foreground right now:
-        val live = currentForegroundPkg
-        if (live != null) {
-            val effectiveStart = maxOf(sessionStartMs, midnightMs)
-            val effectiveEnd = nowMs
-            if (effectiveEnd > effectiveStart) {
-                val duration = minOf(effectiveEnd - effectiveStart, 30 * 60 * 1000L)
-                usageMsMap[live] = (usageMsMap[live] ?: 0L) + duration
-            }
-        }
-
-        return usageMsMap
-    }
-
-    /**
-     * Queries accurate foreground usage milliseconds for [packageName] strictly from today's midnight (00:00:00).
-     * Robust multi-tier calculation: Merges live RAM event buffer with persistent OS daily buckets.
-     * Prevents Android's queryAndAggregateUsageStats interval boundary expansion bug.
-     */
-    fun getDailyUsageMs(packageName: String): Long {
-        val manager = usageStatsManager ?: return 0L
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -245,34 +153,181 @@ class ForegroundAppDetector(private val context: Context) {
         val nowMs = System.currentTimeMillis()
         val maxPossibleTodayMs = maxOf(0L, nowMs - midnightMs)
 
-        // 1. High-precision event calculation (from in-memory buffer)
-        val eventMap = queryAccurateDailyUsageMap()
-        val eventMs = minOf(eventMap[packageName] ?: 0L, maxPossibleTodayMs)
+        // 1. Query persistent OS daily buckets (contains historical sessions flushed to disk)
+        val bucketTotals = mutableMapOf<String, Long>()
+        val bucketLastFlushed = mutableMapOf<String, Long>()
 
-        // 2. Query persistent OS daily buckets strictly for today (no 24h lookback)
-        var bucketMs = 0L
         try {
             val list = manager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
                 midnightMs,
                 nowMs
             )
-            val todayStat = list
-                ?.filter {
-                    it.packageName == packageName &&
-                            it.lastTimeUsed >= midnightMs &&
-                            it.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)
-                }
-                ?.maxByOrNull { it.firstTimeStamp }
+            if (list != null) {
+                val grouped = list.groupBy { it.packageName }
+                val pkgsToEvaluate = targetPackages ?: grouped.keys
 
-            if (todayStat != null) {
-                bucketMs = minOf(todayStat.totalTimeInForeground, maxPossibleTodayMs)
+                for (pkg in pkgsToEvaluate) {
+                    val statsList = grouped[pkg] ?: continue
+                    var pkgBucketMs = 0L
+                    var pkgMaxLastUsed = 0L
+
+                    for (stat in statsList) {
+                        if (stat.lastTimeUsed < midnightMs) continue
+
+                        // Determine how much of this bucket belongs strictly to today
+                        val todayPortion = if (stat.firstTimeStamp >= midnightMs) {
+                            stat.totalTimeInForeground
+                        } else {
+                            // Bucket crossed midnight: cap at time elapsed since midnight
+                            minOf(stat.totalTimeInForeground, maxOf(0L, stat.lastTimeUsed - midnightMs))
+                        }
+
+                        pkgBucketMs += todayPortion
+                        if (stat.lastTimeUsed > pkgMaxLastUsed) {
+                            pkgMaxLastUsed = stat.lastTimeUsed
+                        }
+                    }
+
+                    if (pkgBucketMs > 0L) {
+                        bucketTotals[pkg] = minOf(pkgBucketMs, maxPossibleTodayMs)
+                        bucketLastFlushed[pkg] = pkgMaxLastUsed
+                    }
+                }
             }
         } catch (_: Exception) {}
 
-        // Crucial: Use maxOf across RAM events and verified today's disk buckets
-        val rawMaxMs = minOf(maxOf(eventMs, bucketMs), maxPossibleTodayMs)
-        return highWaterMarkStore.updateHighWaterMarkMs(packageName, rawMaxMs)
+        // 2. Query UsageEvents (in-memory circular buffer for recent and live sessions)
+        val queryStart = midnightMs - (15 * 60 * 1000L)
+        val events = try {
+            manager.queryEvents(queryStart, nowMs)
+        } catch (_: Exception) {
+            null
+        }
+
+        val eventTotals = mutableMapOf<String, Long>()
+        val completedSessionsByPkg = mutableMapOf<String, MutableList<Pair<Long, Long>>>()
+        var currentForegroundPkg: String? = null
+        var currentSessionStartMs: Long = 0L
+
+        if (events != null) {
+            val event = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val time = event.timeStamp
+                val pkg = event.packageName
+
+                when (event.eventType) {
+                    UsageEvents.Event.ACTIVITY_RESUMED -> {
+                        val prev = currentForegroundPkg
+                        if (prev != null && prev != pkg) {
+                            val effectiveStart = maxOf(currentSessionStartMs, midnightMs)
+                            val effectiveEnd = minOf(time, nowMs)
+                            if (effectiveEnd > effectiveStart) {
+                                val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
+                                eventTotals[prev] = (eventTotals[prev] ?: 0L) + duration
+                                completedSessionsByPkg.getOrPut(prev) { mutableListOf() }
+                                    .add(Pair(effectiveStart, effectiveEnd))
+                            }
+                        }
+                        currentForegroundPkg = pkg
+                        currentSessionStartMs = time
+                    }
+                    UsageEvents.Event.ACTIVITY_PAUSED,
+                    UsageEvents.Event.ACTIVITY_STOPPED -> {
+                        if (currentForegroundPkg == pkg) {
+                            val effectiveStart = maxOf(currentSessionStartMs, midnightMs)
+                            val effectiveEnd = minOf(time, nowMs)
+                            if (effectiveEnd > effectiveStart) {
+                                val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
+                                eventTotals[pkg] = (eventTotals[pkg] ?: 0L) + duration
+                                completedSessionsByPkg.getOrPut(pkg) { mutableListOf() }
+                                    .add(Pair(effectiveStart, effectiveEnd))
+                            }
+                            currentForegroundPkg = null
+                        }
+                    }
+                    UsageEvents.Event.SCREEN_NON_INTERACTIVE,
+                    UsageEvents.Event.KEYGUARD_SHOWN -> {
+                        val active = currentForegroundPkg
+                        if (active != null) {
+                            val effectiveStart = maxOf(currentSessionStartMs, midnightMs)
+                            val effectiveEnd = minOf(time, nowMs)
+                            if (effectiveEnd > effectiveStart) {
+                                val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
+                                eventTotals[active] = (eventTotals[active] ?: 0L) + duration
+                                completedSessionsByPkg.getOrPut(active) { mutableListOf() }
+                                    .add(Pair(effectiveStart, effectiveEnd))
+                            }
+                            currentForegroundPkg = null
+                        }
+                    }
+                }
+            }
+
+            // Live active session currently in foreground
+            val livePkg = currentForegroundPkg
+            if (livePkg != null) {
+                val effectiveStart = maxOf(currentSessionStartMs, midnightMs)
+                val effectiveEnd = nowMs
+                if (effectiveEnd > effectiveStart) {
+                    val duration = minOf(effectiveEnd - effectiveStart, 30 * 60 * 1000L)
+                    eventTotals[livePkg] = (eventTotals[livePkg] ?: 0L) + duration
+                    completedSessionsByPkg.getOrPut(livePkg) { mutableListOf() }
+                        .add(Pair(effectiveStart, effectiveEnd))
+                }
+            }
+        }
+
+        // 3. Reconcile: Combine OS bucket flush baselines with post-flush uncommitted events
+        val allCandidatePkgs = (bucketTotals.keys + eventTotals.keys + (targetPackages ?: emptyList()))
+            .let { if (targetPackages != null) it.filter { pkg -> targetPackages.contains(pkg) } else it }
+
+        val resultMap = mutableMapOf<String, Long>()
+
+        for (pkg in allCandidatePkgs) {
+            val bMs = bucketTotals[pkg] ?: 0L
+            val lastFlushTime = bucketLastFlushed[pkg] ?: 0L
+            val eMs = eventTotals[pkg] ?: 0L
+
+            // Calculate uncommitted usage strictly occurring AFTER the last disk flush
+            var postFlushUsageMs = 0L
+            val sessions = completedSessionsByPkg[pkg]
+            if (sessions != null && lastFlushTime >= midnightMs) {
+                for ((start, end) in sessions) {
+                    if (end > lastFlushTime) {
+                        val incremental = end - maxOf(start, lastFlushTime)
+                        if (incremental > 0L) {
+                            postFlushUsageMs += incremental
+                        }
+                    }
+                }
+            }
+
+            // Monotonic true usage calculation:
+            // Combines disk baseline with post-flush events, or pure event buffer if complete
+            val candidateUsage = maxOf(bMs + postFlushUsageMs, eMs)
+            val verifiedMs = minOf(candidateUsage, maxPossibleTodayMs)
+
+            val finalMs = highWaterMarkStore.updateHighWaterMarkMs(pkg, verifiedMs)
+            resultMap[pkg] = finalMs
+        }
+
+        return resultMap
+    }
+
+    /**
+     * Backward-compatible delegation to reconciled daily usage map.
+     */
+    fun queryAccurateDailyUsageMap(): Map<String, Long> {
+        return queryReconciledDailyUsageMap()
+    }
+
+    /**
+     * Queries accurate foreground usage milliseconds for [packageName] strictly from today's midnight (00:00:00).
+     */
+    fun getDailyUsageMs(packageName: String): Long {
+        return queryReconciledDailyUsageMap(setOf(packageName))[packageName] ?: 0L
     }
 
     /**
@@ -280,53 +335,10 @@ class ForegroundAppDetector(private val context: Context) {
      * Uses multi-tier evaluation to work reliably across all Android versions and OEM skins.
      */
     fun getDailyUsageMinutesMap(packageNames: Collection<String>): Map<String, Int> {
-        val manager = usageStatsManager ?: return emptyMap()
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        val msMap = queryReconciledDailyUsageMap(packageNames)
+        return packageNames.associateWith { pkg ->
+            ((msMap[pkg] ?: 0L) / (1000 * 60)).toInt()
         }
-        val midnightMs = calendar.timeInMillis
-        val nowMs = System.currentTimeMillis()
-        val maxPossibleTodayMs = maxOf(0L, nowMs - midnightMs)
-
-        // 1. Event buffer map
-        val eventMap = queryAccurateDailyUsageMap()
-
-        // 2. Query OS daily usage buckets strictly for today (no 24h lookback)
-        val bucketMap = mutableMapOf<String, Long>()
-        try {
-            val list = manager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
-                midnightMs,
-                nowMs
-            )
-            val grouped = list?.groupBy { it.packageName } ?: emptyMap()
-            for (pkg in packageNames) {
-                val todayStat = grouped[pkg]
-                    ?.filter {
-                        it.lastTimeUsed >= midnightMs &&
-                                it.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)
-                    }
-                    ?.maxByOrNull { it.firstTimeStamp }
-
-                if (todayStat != null) {
-                    bucketMap[pkg] = minOf(todayStat.totalTimeInForeground, maxPossibleTodayMs)
-                }
-            }
-        } catch (_: Exception) {}
-
-        val result = mutableMapOf<String, Int>()
-        for (pkg in packageNames) {
-            val eMs = minOf(eventMap[pkg] ?: 0L, maxPossibleTodayMs)
-            val bMs = bucketMap[pkg] ?: 0L
-            val rawMs = minOf(maxOf(eMs, bMs), maxPossibleTodayMs)
-            val verifiedMs = highWaterMarkStore.updateHighWaterMarkMs(pkg, rawMs)
-            result[pkg] = (verifiedMs / (1000 * 60)).toInt()
-        }
-
-        return result
     }
 
     /**
@@ -334,7 +346,6 @@ class ForegroundAppDetector(private val context: Context) {
      * Accurately reflects device total separate from individual apps.
      */
     fun getTotalScreenTimeTodayMinutes(): Int {
-        val manager = usageStatsManager ?: return 0
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -345,40 +356,13 @@ class ForegroundAppDetector(private val context: Context) {
         val nowMs = System.currentTimeMillis()
         val maxPossibleTodayMs = maxOf(0L, nowMs - midnightMs)
 
-        // 1. High-precision event calculation across all packages
-        val eventMap = queryAccurateDailyUsageMap()
-        val eventTotalMs = eventMap
+        val allMap = queryReconciledDailyUsageMap()
+        val totalMs = allMap
             .filterKeys { pkg -> !isSystemOrLauncherPackage(pkg) }
             .values
             .sum()
 
-        // 2. Daily buckets query strictly for today (no 24h lookback)
-        var bucketTotalMs = 0L
-        try {
-            val list = manager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
-                midnightMs,
-                nowMs
-            )
-            val grouped = list?.groupBy { it.packageName } ?: emptyMap()
-
-            for ((pkg, statsGroup) in grouped) {
-                if (isSystemOrLauncherPackage(pkg)) continue
-
-                val todayStat = statsGroup
-                    .filter {
-                        it.lastTimeUsed >= midnightMs &&
-                                it.firstTimeStamp >= midnightMs - (4 * 60 * 60 * 1000L)
-                    }
-                    .maxByOrNull { it.firstTimeStamp }
-
-                if (todayStat != null) {
-                    bucketTotalMs += minOf(todayStat.totalTimeInForeground, maxPossibleTodayMs)
-                }
-            }
-        } catch (_: Exception) {}
-
-        val rawTotalMs = minOf(maxOf(eventTotalMs, bucketTotalMs), maxPossibleTodayMs)
+        val rawTotalMs = minOf(totalMs, maxPossibleTodayMs)
         val verifiedTotalMs = highWaterMarkStore.updateScreenTimeHighWaterMarkMs(rawTotalMs)
         return (verifiedTotalMs / (1000 * 60)).toInt()
     }

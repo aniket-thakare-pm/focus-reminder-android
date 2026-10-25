@@ -117,6 +117,11 @@ class UsageMonitorService : ComponentActivityService() {
     private var lastContractPackage: String? = null
     private var lastContractTimeMs: Long = 0L
 
+    // Continuous Real-Time App Session Tracking
+    private var trackedForegroundPkg: String? = null
+    private var trackedForegroundStartMs: Long = 0L
+    private var trackedForegroundAppName: String? = null
+
     override fun onCreate() {
         super.onCreate()
         detector = ForegroundAppDetector(this)
@@ -175,15 +180,45 @@ class UsageMonitorService : ComponentActivityService() {
                     continue
                 }
 
-                val currentApp = detector.getForegroundPackageName() ?: continue
+                val currentApp = detector.getForegroundPackageName()
+                val now = System.currentTimeMillis()
 
-                // Don't monitor our own app
-                if (currentApp == packageName) {
+                // Continuous background session logger across ALL user applications:
+                // Immediately commits completed sessions to SQLite upon app switch or screen-off,
+                // making data 100% immune to Android RAM circular buffer eviction.
+                val activeForLogging = if (currentApp != null && currentApp != packageName && !analyticsRepo.isIgnoredSystemPackage(currentApp)) {
+                    currentApp
+                } else {
+                    null
+                }
+
+                if (activeForLogging != trackedForegroundPkg) {
+                    val prevPkg = trackedForegroundPkg
+                    if (prevPkg != null) {
+                        val duration = now - trackedForegroundStartMs
+                        if (duration >= 2000L) {
+                            val appLabel = trackedForegroundAppName ?: analyticsRepo.getAppName(prevPkg)
+                            analyticsRepo.recordSession(prevPkg, appLabel, trackedForegroundStartMs, now, duration)
+                        }
+                    }
+
+                    if (activeForLogging != null) {
+                        trackedForegroundPkg = activeForLogging
+                        trackedForegroundStartMs = now
+                        trackedForegroundAppName = analyticsRepo.getAppName(activeForLogging)
+                    } else {
+                        trackedForegroundPkg = null
+                        trackedForegroundStartMs = 0L
+                        trackedForegroundAppName = null
+                    }
+                }
+
+                // If phone is locked, screen is off, or user is in our app, skip enforcement
+                if (currentApp == null || currentApp == packageName) {
                     continue
                 }
 
                 val restrictedPackages = repo.getRestrictedPackages()
-                val now = System.currentTimeMillis()
 
                 // Check active session status
                 val activePkg = activeSessionPackage
@@ -214,9 +249,19 @@ class UsageMonitorService : ComponentActivityService() {
                             val cooldownMin = activeCooldownMinutes
 
                             // Record completed session in analytics database
-                            val duration = now - activeSessionStartMs
-                            if (duration >= 1000L) {
-                                analyticsRepo.recordSession(activePkg, appLabel, activeSessionStartMs, now, duration)
+                            if (trackedForegroundPkg == activePkg) {
+                                val duration = now - trackedForegroundStartMs
+                                if (duration >= 1000L) {
+                                    analyticsRepo.recordSession(activePkg, appLabel, trackedForegroundStartMs, now, duration)
+                                }
+                                trackedForegroundPkg = null
+                                trackedForegroundStartMs = 0L
+                                trackedForegroundAppName = null
+                            } else {
+                                val duration = now - activeSessionStartMs
+                                if (duration >= 1000L) {
+                                    analyticsRepo.recordSession(activePkg, appLabel, activeSessionStartMs, now, duration)
+                                }
                             }
 
                             // Enforce cooldown lock

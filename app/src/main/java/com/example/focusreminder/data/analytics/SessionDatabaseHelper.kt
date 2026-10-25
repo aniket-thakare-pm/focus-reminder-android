@@ -168,6 +168,18 @@ class SessionDatabaseHelper private constructor(context: Context) :
     }
 
     /**
+     * Checks if any sessions have been recorded within [startTimeMs, endTimeMs].
+     */
+    fun hasSessionsForTimeRange(startTimeMs: Long, endTimeMs: Long): Boolean {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT 1 FROM $TABLE_SESSIONS WHERE $COL_START_TIME >= ? AND $COL_START_TIME <= ? LIMIT 1",
+            arrayOf(startTimeMs.toString(), endTimeMs.toString())
+        )
+        return cursor.use { it.moveToFirst() }
+    }
+
+    /**
      * Returns the timestamp of the earliest recorded session, or null if empty.
      */
     fun getEarliestSessionTime(): Long? {
