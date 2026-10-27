@@ -136,7 +136,9 @@ class ForegroundAppDetector(private val context: Context) {
                 events.getNextEvent(event)
                 when (event.eventType) {
                     UsageEvents.Event.ACTIVITY_RESUMED -> {
-                        lastResumedPackage = event.packageName
+                        if (!SystemPackageFilter.isKnownSystemOrUpdater(event.packageName)) {
+                            lastResumedPackage = event.packageName
+                        }
                     }
                     UsageEvents.Event.SCREEN_NON_INTERACTIVE,
                     UsageEvents.Event.KEYGUARD_SHOWN -> {
@@ -206,6 +208,7 @@ class ForegroundAppDetector(private val context: Context) {
                 val pkgsToEvaluate = targetPackages ?: grouped.keys
 
                 for (pkg in pkgsToEvaluate) {
+                    if (SystemPackageFilter.isIgnoredOrSystem(context, pkg)) continue
                     val statsList = grouped[pkg] ?: continue
 
                     // Strictly filter buckets that touch today (lastTimeStamp > midnightMs)
@@ -252,6 +255,23 @@ class ForegroundAppDetector(private val context: Context) {
 
                 when (event.eventType) {
                     UsageEvents.Event.ACTIVITY_RESUMED -> {
+                        if (SystemPackageFilter.isIgnoredOrSystem(context, pkg)) {
+                            // System daemon or launcher resumed: terminate previous app session cleanly
+                            val prev = currentForegroundPkg
+                            if (prev != null) {
+                                val effectiveStart = maxOf(currentSessionStartMs, midnightMs)
+                                val effectiveEnd = minOf(time, nowMs)
+                                if (effectiveEnd > effectiveStart) {
+                                    val duration = minOf(effectiveEnd - effectiveStart, 4 * 60 * 60 * 1000L)
+                                    eventTotals[prev] = (eventTotals[prev] ?: 0L) + duration
+                                    completedSessionsByPkg.getOrPut(prev) { mutableListOf() }
+                                        .add(Pair(effectiveStart, effectiveEnd))
+                                }
+                            }
+                            currentForegroundPkg = null
+                            currentSessionStartMs = 0L
+                            continue
+                        }
                         if (currentForegroundPkg == pkg) {
                             // Intra-app transition (e.g. Feed -> Reel -> DM), continue session
                             continue
@@ -407,22 +427,27 @@ class ForegroundAppDetector(private val context: Context) {
                         }
                         val activeStart = currentSessionStart
                         val activePkg = currentPkg
-                        if (activeStart != null && activePkg != null && !isSystemOrLauncherPackage(activePkg)) {
+                        if (activeStart != null && activePkg != null && !SystemPackageFilter.isIgnoredOrSystem(context, activePkg)) {
                             val start = maxOf(activeStart, midnightMs)
                             val end = minOf(t, nowMs)
                             if (end > start) {
                                 intervals.add(Pair(start, end))
                             }
                         }
-                        currentSessionStart = t
-                        currentPkg = pkg
+                        if (SystemPackageFilter.isIgnoredOrSystem(context, pkg)) {
+                            currentSessionStart = null
+                            currentPkg = null
+                        } else {
+                            currentSessionStart = t
+                            currentPkg = pkg
+                        }
                     }
                     UsageEvents.Event.SCREEN_NON_INTERACTIVE,
                     UsageEvents.Event.KEYGUARD_SHOWN -> {
                         val activeStart = currentSessionStart
                         val activePkg = currentPkg
                         if (activeStart != null && activePkg != null) {
-                            if (!isSystemOrLauncherPackage(activePkg)) {
+                            if (!SystemPackageFilter.isIgnoredOrSystem(context, activePkg)) {
                                 val start = maxOf(activeStart, midnightMs)
                                 val end = minOf(t, nowMs)
                                 if (end > start) {
@@ -440,7 +465,7 @@ class ForegroundAppDetector(private val context: Context) {
         // Include current ongoing session if screen is on
         val liveStart = currentSessionStart
         val livePkg = currentPkg
-        if (liveStart != null && livePkg != null && !isSystemOrLauncherPackage(livePkg)) {
+        if (liveStart != null && livePkg != null && !SystemPackageFilter.isIgnoredOrSystem(context, livePkg)) {
             val start = maxOf(liveStart, midnightMs)
             val end = nowMs
             if (end > start) {
@@ -476,17 +501,6 @@ class ForegroundAppDetector(private val context: Context) {
     }
 
     private fun isSystemOrLauncherPackage(pkg: String): Boolean {
-        return pkg.startsWith("com.android.launcher") ||
-                pkg.startsWith("com.google.android.apps.nexuslauncher") ||
-                pkg.startsWith("com.sec.android.app.launcher") ||
-                pkg.startsWith("com.coloros.launcher") ||
-                pkg.startsWith("com.oppo.launcher") ||
-                pkg.startsWith("com.oneplus.launcher") ||
-                pkg.contains(".launcher") ||
-                pkg.startsWith("com.miui.home") ||
-                pkg.startsWith("com.google.android.inputmethod") ||
-                pkg.startsWith("com.android.systemui") ||
-                pkg.startsWith("com.android.settings") ||
-                pkg == context.packageName
+        return SystemPackageFilter.isIgnoredOrSystem(context, pkg)
     }
 }

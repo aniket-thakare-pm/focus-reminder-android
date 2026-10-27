@@ -9,6 +9,7 @@ import com.example.focusreminder.data.analytics.SessionDatabaseHelper
 import com.example.focusreminder.domain.model.*
 import com.example.focusreminder.platform.AppRestrictionRepository
 import com.example.focusreminder.platform.ForegroundAppDetector
+import com.example.focusreminder.platform.SystemPackageFilter
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -757,17 +758,6 @@ class AnalyticsRepository private constructor(private val context: Context) {
     }
 
     fun isIgnoredSystemPackage(pkg: String): Boolean {
-        return pkg.startsWith("com.android.launcher") ||
-                pkg.startsWith("com.google.android.apps.nexuslauncher") ||
-                pkg.startsWith("com.sec.android.app.launcher") ||
-                pkg.startsWith("com.coloros.launcher") ||
-                pkg.startsWith("com.oppo.launcher") ||
-                pkg.startsWith("com.oneplus.launcher") ||
-                pkg.contains(".launcher") ||
-                pkg.startsWith("com.miui.home") ||
-                pkg.startsWith("com.google.android.inputmethod") ||
-                pkg.startsWith("com.android.systemui") ||
-                pkg.startsWith("com.android.settings") ||
-                pkg == context.packageName
+        return SystemPackageFilter.isIgnoredOrSystem(context, pkg)
     }
 }

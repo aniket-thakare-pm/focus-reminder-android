@@ -15,7 +15,7 @@ class SessionDatabaseHelper private constructor(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "focus_sessions.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         const val TABLE_SESSIONS = "usage_sessions"
         const val COL_ID = "id"
@@ -60,8 +60,8 @@ class SessionDatabaseHelper private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 2) {
-            // Drop table to purge corrupted synthetic sessions from v1.10.0;
+        if (oldVersion < 3) {
+            // Drop table to purge corrupted synthetic sessions and system updater daemons;
             // fresh sessions are automatically resynced from ground-truth UsageEvents.
             db.execSQL("DROP TABLE IF EXISTS $TABLE_SESSIONS")
             onCreate(db)

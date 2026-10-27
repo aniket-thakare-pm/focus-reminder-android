@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import com.example.focusreminder.domain.model.UsageLogEntry
 import com.example.focusreminder.domain.model.UsageLogSummary
 import com.example.focusreminder.platform.AppRestrictionRepository
+import com.example.focusreminder.platform.SystemPackageFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -73,18 +74,8 @@ class UsageLogRepository private constructor(private val context: Context) {
         var currentPkg: String? = null
         var sessionStartMs: Long = 0L
 
-        fun isLauncherOrSystemUI(pkg: String): Boolean {
-            return pkg.startsWith("com.android.launcher") ||
-                    pkg.startsWith("com.google.android.apps.nexuslauncher") ||
-                    pkg.startsWith("com.sec.android.app.launcher") ||
-                    pkg.startsWith("com.coloros.launcher") ||
-                    pkg.startsWith("com.oppo.launcher") ||
-                    pkg.startsWith("com.oneplus.launcher") ||
-                    pkg.contains(".launcher") ||
-                    pkg.startsWith("com.miui.home") ||
-                    pkg.startsWith("com.google.android.inputmethod") ||
-                    pkg.startsWith("com.android.systemui") ||
-                    pkg.startsWith("com.android.settings")
+        fun isIgnoredSystemOrLauncher(pkg: String): Boolean {
+            return SystemPackageFilter.isIgnoredOrSystem(context, pkg)
         }
 
         if (events != null) {
@@ -107,7 +98,7 @@ class UsageLogRepository private constructor(private val context: Context) {
                                 rawSessions.add(RawSession(prev, sessionStartMs, time, duration))
                             }
                         }
-                        if (isLauncherOrSystemUI(pkg)) {
+                        if (isIgnoredSystemOrLauncher(pkg)) {
                             // User went to home screen / launcher: end active app session, don't record launcher as app session
                             currentPkg = null
                             sessionStartMs = 0L
