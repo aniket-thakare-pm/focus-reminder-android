@@ -15,7 +15,7 @@ class SessionDatabaseHelper private constructor(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "focus_sessions.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         const val TABLE_SESSIONS = "usage_sessions"
         const val COL_ID = "id"
@@ -60,11 +60,42 @@ class SessionDatabaseHelper private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 3) {
-            // Drop table to purge corrupted synthetic sessions and system updater daemons;
+        if (oldVersion < 4) {
+            // Drop table to purge corrupted synthetic sessions and duplicate records;
             // fresh sessions are automatically resynced from ground-truth UsageEvents.
             db.execSQL("DROP TABLE IF EXISTS $TABLE_SESSIONS")
             onCreate(db)
+        }
+    }
+
+    /**
+     * Atomically replaces all sessions in [startTimeMs, endTimeMs] with [sessions].
+     * Guarantees zero duplicate accumulation and complete idempotency across sync cycles.
+     */
+    fun replaceSessionsForRange(startTimeMs: Long, endTimeMs: Long, sessions: List<UsageSession>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete(
+                TABLE_SESSIONS,
+                "$COL_START_TIME >= ? AND $COL_START_TIME <= ?",
+                arrayOf(startTimeMs.toString(), endTimeMs.toString())
+            )
+            for (session in sessions) {
+                val values = ContentValues().apply {
+                    put(COL_PACKAGE_NAME, session.packageName)
+                    put(COL_APP_NAME, session.appName)
+                    put(COL_START_TIME, session.startTimeMs)
+                    put(COL_END_TIME, session.endTimeMs)
+                    put(COL_DURATION_MS, session.durationMs)
+                    put(COL_SECTOR_ID, session.sectorId)
+                    put(COL_CATEGORY, session.category)
+                }
+                db.insertWithOnConflict(TABLE_SESSIONS, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 

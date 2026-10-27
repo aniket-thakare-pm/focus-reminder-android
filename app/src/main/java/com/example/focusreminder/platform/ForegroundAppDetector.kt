@@ -349,8 +349,14 @@ class ForegroundAppDetector(private val context: Context) {
             }
 
             // Monotonic true usage calculation:
-            // Combines disk baseline with post-flush events, or pure event buffer if complete
-            val candidateUsage = maxOf(bMs + postFlushUsageMs, eMs)
+            // When UsageEvents ring buffer is available, eMs represents the true interactive
+            // foreground usage strictly since today's midnight. bMs (INTERVAL_DAILY) is an
+            // unaligned OEM bucket fallback only if queryEvents failed.
+            val candidateUsage = if (events != null) {
+                eMs
+            } else {
+                minOf(bMs + postFlushUsageMs, maxPossibleTodayMs)
+            }
             val verifiedMs = minOf(candidateUsage, maxPossibleTodayMs)
 
             val finalMs = highWaterMarkStore.updateHighWaterMarkMs(pkg, verifiedMs)

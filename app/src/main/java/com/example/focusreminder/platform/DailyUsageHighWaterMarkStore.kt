@@ -21,7 +21,7 @@ class DailyUsageHighWaterMarkStore private constructor(context: Context) {
         context.getSharedPreferences("daily_usage_high_water_mark_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        private const val CURRENT_VERSION = 4
+        private const val CURRENT_VERSION = 5
         private const val KEY_STORE_VERSION = "store_version"
         private const val PREFIX_USAGE = "usage_"
         private const val PREFIX_SCREEN_TIME = "screen_time_"

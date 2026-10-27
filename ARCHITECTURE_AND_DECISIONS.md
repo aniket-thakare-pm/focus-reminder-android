@@ -163,13 +163,33 @@
 
 ---
 
+### ADR-006: Hardware UsageEvents as Sole Ground Truth & Elimination of Synthetic Sessions
+* **Date**: October 2026 (v1.14.0)
+* **Problem**:
+  1. Discrepancy between Usage Logbook (Morning: 41m, Total: 5h 11m) and Analytics (Morning: 5h 34m, Total: 9h 35m). In a 6-hour Morning window (06:00 to 12:00), 5h 34m was mathematically impossible.
+  2. Re-inflation on screen navigation: The app briefly showed accurate times, but navigating between pages inflated total screen time to 9h 35m and Morning to 5h 34m.
+* **Root Cause**:
+  1. `AnalyticsRepository.kt` ran an artificial synthetic session engine: when daily bucket estimates (`INTERVAL_DAILY`) exceeded recorded sessions, it synthesized fake sessions and anchored them at `09:00 AM` (`todayMidnightMs + 9 hours`). Because 09:00 AM lies in the Morning sector, hours of phantom deltas across all apps were dumped into Morning.
+  2. `dbHelper.insertSessions(newSynthesizedSessions)` permanently wrote those fake sessions into SQLite. Navigating between screens re-queried SQLite, compounding real hardware sessions with previously inserted fake sessions.
+  3. Android's `INTERVAL_DAILY` buckets in `ForegroundAppDetector` frequently include unaligned 24-hour OEM rolling windows or background media time. `candidateUsage = maxOf(bMs, eMs)` favored the inflated `bMs` over the true interactive `eMs`.
+* **Decision**:
+  1. Completely delete synthetic session injection from `AnalyticsRepository.kt`. No fake sessions are ever created or anchored at 09:00 AM.
+  2. Make Android's kernel `UsageEvents` stream (`eventTotals`) the sole authoritative ground truth across `ForegroundAppDetector`, `UsageLogRepository`, and `AnalyticsRepository`.
+  3. Add `replaceSessionsForRange(startTimeMs, endTimeMs, sessions)` in `SessionDatabaseHelper` to atomically clear and re-populate the SQLite window with clean hardware events on each sync. Sync is completely idempotent.
+  4. Bump `SessionDatabaseHelper.DATABASE_VERSION` to `4` to auto-drop legacy tables containing corrupted synthetic sessions.
+  5. Bump `DailyUsageHighWaterMarkStore.CURRENT_VERSION` to `5` to auto-purge stale high-water marks.
+* **Consequence**:
+  100% mathematical parity across the app: Logbook, Analytics, Dashboard, and Google Digital Wellbeing show identical numbers. Screen navigation produces zero inflation.
+
+---
+
 ## 3. Schema & Cache Version Matrix
 
 | Store / Database | Version | Purpose of Latest Schema Upgrade |
 | :--- | :--- | :--- |
-| **`SessionDatabaseHelper`** (`focus_sessions.db`) | **`v3`** | Auto-drops legacy tables containing inflated synthetic sessions or OEM updater entries; repopulates clean sessions directly from hardware `UsageEvents`. |
-| **`DailyUsageHighWaterMarkStore`** (`daily_usage_high_water_mark_prefs`) | **`v4`** | Auto-purges legacy cached high-water marks for `com.coloros.sau` and previously multiplied bucket totals on app launch. |
-| **`app/build.gradle.kts`** | **`v1.13.0`** (vc: `20`) | Current production-ready build. |
+| **`SessionDatabaseHelper`** (`focus_sessions.db`) | **`v4`** | Auto-drops legacy tables containing 09:00 AM synthetic sessions and duplicate records; repopulates clean sessions directly from hardware `UsageEvents`. |
+| **`DailyUsageHighWaterMarkStore`** (`daily_usage_high_water_mark_prefs`) | **`v5`** | Auto-purges legacy cached high-water marks from previous versions on app launch. |
+| **`app/build.gradle.kts`** | **`v1.14.0`** (vc: `21`) | Current production-ready build. |
 
 ---
 

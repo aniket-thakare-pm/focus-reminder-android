@@ -46,7 +46,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
         endTimeMs: Long,
         durationMs: Long
     ) {
-        if (durationMs < 1000L || isIgnoredSystemPackage(packageName)) return
+        if (durationMs < 3000L || isIgnoredSystemPackage(packageName)) return
 
         val sector = sectorStore.getSectorForTimestamp(startTimeMs)
         val category = resolveAppCategory(packageName)
@@ -65,7 +65,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
 
     /**
      * Synchronizes recent sessions from Android's UsageEvents ring buffer into our local SQLite database.
-     * Idempotent: existing sessions are safely ignored.
+     * Idempotent: atomically replaces sessions for the sync window with clean hardware events.
      */
     fun syncFromSystemUsageEvents(lookbackDays: Int = 14) {
         val manager = usageStatsManager ?: return
@@ -105,7 +105,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
                     val prev = currentPkg
                     if (prev != null) {
                         val duration = time - sessionStartMs
-                        if (duration >= 2000L && !isIgnoredSystemPackage(prev)) {
+                        if (duration >= 1000L && !isIgnoredSystemPackage(prev)) {
                             val sector = sectorStore.getSectorForTimestamp(sessionStartMs)
                             val cat = resolveAppCategory(prev)
                             val name = getAppName(prev)
@@ -135,7 +135,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
                     val activePkg = currentPkg
                     if (activePkg != null) {
                         val duration = time - sessionStartMs
-                        if (duration >= 2000L && !isIgnoredSystemPackage(activePkg)) {
+                        if (duration >= 1000L && !isIgnoredSystemPackage(activePkg)) {
                             val sector = sectorStore.getSectorForTimestamp(sessionStartMs)
                             val cat = resolveAppCategory(activePkg)
                             val name = getAppName(activePkg)
@@ -172,9 +172,11 @@ class AnalyticsRepository private constructor(private val context: Context) {
             }
         }
 
-        if (mergedSessions.isNotEmpty()) {
-            dbHelper.insertSessions(mergedSessions)
-        }
+        // Filter out spurious micro-flickers under 3 seconds (aligns 100% with UsageLogRepository)
+        val finalizedSessions = mergedSessions.filter { it.durationMs >= 3000L }
+
+        // Atomically replace the database window with clean ground-truth sessions
+        dbHelper.replaceSessionsForRange(startQueryMs, now, finalizedSessions)
     }
 
     /**
@@ -334,74 +336,14 @@ class AnalyticsRepository private constructor(private val context: Context) {
             category = filterCategory
         )
 
-        val reconciledRawSessions = rawSessions.toMutableList()
-
-        if (timeframe == AnalyticsTimeframe.TODAY && dateOffset == 0) {
-            // Authoritative Reconciliation for Today:
-            // Combines SQLite sessions with ForegroundAppDetector's Post-Flush Incremental Engine.
-            // Guarantees Analytics matches Dashboard and Digital Wellbeing 100%.
-            val authoritativeMap = detector.queryReconciledDailyUsageMap(
-                if (filterPackage != null) setOf(filterPackage) else null
-            )
-            val calToday = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            val todayMidnightMs = calToday.timeInMillis
-
-            val existingSessionsByPkg = rawSessions.groupBy { it.packageName }
-            val newSynthesizedSessions = mutableListOf<UsageSession>()
-
-            for ((pkg, authMs) in authoritativeMap) {
-                if (isIgnoredSystemPackage(pkg)) continue
-
-                val recordedSessions = existingSessionsByPkg[pkg] ?: emptyList()
-                val recordedMs = recordedSessions.sumOf { it.durationMs }
-
-                // If authoritative usage exceeds recorded sessions by >= 1 minute (e.g. morning sessions before app started)
-                if (authMs > recordedMs + 60_000L) {
-                    val missingDeltaMs = authMs - recordedMs
-                    val firstRecordedStart = recordedSessions.minOfOrNull { it.startTimeMs }
-
-                    val anchorStartMs = if (firstRecordedStart != null && firstRecordedStart > todayMidnightMs + missingDeltaMs) {
-                        firstRecordedStart - missingDeltaMs
-                    } else {
-                        todayMidnightMs + (9 * 60 * 60 * 1000L) // 09:00 AM anchor
-                    }
-                    val anchorEndMs = anchorStartMs + missingDeltaMs
-                    val sector = sectorStore.getSectorForTimestamp(anchorStartMs)
-                    val cat = resolveAppCategory(pkg)
-                    val name = getAppName(pkg)
-
-                    val anchored = UsageSession(
-                        packageName = pkg,
-                        appName = name,
-                        startTimeMs = anchorStartMs,
-                        endTimeMs = anchorEndMs,
-                        durationMs = missingDeltaMs,
-                        sectorId = sector.id,
-                        category = cat
-                    )
-                    newSynthesizedSessions.add(anchored)
-                    reconciledRawSessions.add(anchored)
-                }
-            }
-
-            if (newSynthesizedSessions.isNotEmpty()) {
-                dbHelper.insertSessions(newSynthesizedSessions)
-            }
-        }
-
         val controlled = restrictionRepo.getRestrictedPackages()
 
         // Filter according to selected scope
         val sessions = when {
-            filterPackage != null -> reconciledRawSessions.filter { it.packageName == filterPackage }
-            filterCategory != null -> reconciledRawSessions.filter { it.category == filterCategory }
-            isControlledOnly -> reconciledRawSessions.filter { controlled.contains(it.packageName) }
-            else -> reconciledRawSessions // All device apps!
+            filterPackage != null -> rawSessions.filter { it.packageName == filterPackage }
+            filterCategory != null -> rawSessions.filter { it.category == filterCategory }
+            isControlledOnly -> rawSessions.filter { controlled.contains(it.packageName) }
+            else -> rawSessions // All device apps!
         }
 
         val scopeLabel = when {
@@ -667,7 +609,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
         }.sortedByDescending { it.durationMinutes }
 
         // Available lists for filtering (with controlled status)
-        val allDistinctPackages = reconciledRawSessions.map { it.packageName }.distinct()
+        val allDistinctPackages = rawSessions.map { it.packageName }.distinct()
         val availableAppStats = allDistinctPackages.map { pkg ->
             val isCtrl = controlled.contains(pkg)
             val name = getAppName(pkg)
@@ -681,7 +623,7 @@ class AnalyticsRepository private constructor(private val context: Context) {
             )
         }.sortedWith(compareByDescending<AppUsageStat> { it.isControlled }.thenBy { it.appName })
 
-        val allRecordedCategories = reconciledRawSessions.map { it.category }.distinct().sorted()
+        val allRecordedCategories = rawSessions.map { it.category }.distinct().sorted()
 
         return AnalyticsSummary(
             timeframe = timeframe,
