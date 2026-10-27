@@ -97,8 +97,12 @@ class AnalyticsRepository private constructor(private val context: Context) {
 
             when (event.eventType) {
                 UsageEvents.Event.ACTIVITY_RESUMED -> {
+                    if (currentPkg == pkg) {
+                        // Intra-app transition (e.g. Feed -> Reel -> DM), continue session
+                        continue
+                    }
                     val prev = currentPkg
-                    if (prev != null && prev != pkg) {
+                    if (prev != null) {
                         val duration = time - sessionStartMs
                         if (duration >= 2000L && !isIgnoredSystemPackage(prev)) {
                             val sector = sectorStore.getSectorForTimestamp(sessionStartMs)
@@ -117,15 +121,18 @@ class AnalyticsRepository private constructor(private val context: Context) {
                             )
                         }
                     }
-                    currentPkg = pkg
-                    sessionStartMs = time
+                    if (isIgnoredSystemPackage(pkg)) {
+                        currentPkg = null
+                        sessionStartMs = 0L
+                    } else {
+                        currentPkg = pkg
+                        sessionStartMs = time
+                    }
                 }
-                UsageEvents.Event.ACTIVITY_PAUSED,
-                UsageEvents.Event.ACTIVITY_STOPPED,
                 UsageEvents.Event.SCREEN_NON_INTERACTIVE,
                 UsageEvents.Event.KEYGUARD_SHOWN -> {
-                    if (currentPkg != null && (currentPkg == pkg || event.eventType == UsageEvents.Event.SCREEN_NON_INTERACTIVE)) {
-                        val activePkg = currentPkg
+                    val activePkg = currentPkg
+                    if (activePkg != null) {
                         val duration = time - sessionStartMs
                         if (duration >= 2000L && !isIgnoredSystemPackage(activePkg)) {
                             val sector = sectorStore.getSectorForTimestamp(sessionStartMs)
@@ -144,13 +151,28 @@ class AnalyticsRepository private constructor(private val context: Context) {
                             )
                         }
                         currentPkg = null
+                        sessionStartMs = 0L
                     }
                 }
             }
         }
 
-        if (sessions.isNotEmpty()) {
-            dbHelper.insertSessions(sessions)
+        // Merge adjacent sessions for the same package with micro-gaps (<= 5 seconds)
+        val mergedSessions = mutableListOf<UsageSession>()
+        for (session in sessions) {
+            val last = mergedSessions.lastOrNull()
+            if (last != null && last.packageName == session.packageName && (session.startTimeMs - last.endTimeMs) <= 5000L) {
+                mergedSessions[mergedSessions.size - 1] = last.copy(
+                    endTimeMs = session.endTimeMs,
+                    durationMs = session.endTimeMs - last.startTimeMs
+                )
+            } else {
+                mergedSessions.add(session)
+            }
+        }
+
+        if (mergedSessions.isNotEmpty()) {
+            dbHelper.insertSessions(mergedSessions)
         }
     }
 
@@ -186,7 +208,9 @@ class AnalyticsRepository private constructor(private val context: Context) {
 
                 for ((pkg, stats) in grouped) {
                     if (isIgnoredSystemPackage(pkg)) continue
-                    val totalMs = stats.sumOf { it.totalTimeInForeground }
+                    val dayBuckets = stats.filter { it.lastTimeStamp > dayStartMs && it.firstTimeStamp < dayEndMs }
+                    val bestBucket = dayBuckets.maxByOrNull { it.lastTimeStamp } ?: continue
+                    val totalMs = bestBucket.totalTimeInForeground
                     if (totalMs < 60_000L) continue // At least 1 minute
 
                     val cat = resolveAppCategory(pkg)
@@ -736,6 +760,10 @@ class AnalyticsRepository private constructor(private val context: Context) {
         return pkg.startsWith("com.android.launcher") ||
                 pkg.startsWith("com.google.android.apps.nexuslauncher") ||
                 pkg.startsWith("com.sec.android.app.launcher") ||
+                pkg.startsWith("com.coloros.launcher") ||
+                pkg.startsWith("com.oppo.launcher") ||
+                pkg.startsWith("com.oneplus.launcher") ||
+                pkg.contains(".launcher") ||
                 pkg.startsWith("com.miui.home") ||
                 pkg.startsWith("com.google.android.inputmethod") ||
                 pkg.startsWith("com.android.systemui") ||

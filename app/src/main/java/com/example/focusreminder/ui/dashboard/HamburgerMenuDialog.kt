@@ -90,6 +90,15 @@ fun HamburgerMenuDialog(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Focus Reminder v1.11.0",
+                    fontSize = 10.sp,
+                    color = TextMuted,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
             }
         },
         confirmButton = {},

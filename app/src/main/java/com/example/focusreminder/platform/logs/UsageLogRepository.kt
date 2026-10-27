@@ -73,6 +73,20 @@ class UsageLogRepository private constructor(private val context: Context) {
         var currentPkg: String? = null
         var sessionStartMs: Long = 0L
 
+        fun isLauncherOrSystemUI(pkg: String): Boolean {
+            return pkg.startsWith("com.android.launcher") ||
+                    pkg.startsWith("com.google.android.apps.nexuslauncher") ||
+                    pkg.startsWith("com.sec.android.app.launcher") ||
+                    pkg.startsWith("com.coloros.launcher") ||
+                    pkg.startsWith("com.oppo.launcher") ||
+                    pkg.startsWith("com.oneplus.launcher") ||
+                    pkg.contains(".launcher") ||
+                    pkg.startsWith("com.miui.home") ||
+                    pkg.startsWith("com.google.android.inputmethod") ||
+                    pkg.startsWith("com.android.systemui") ||
+                    pkg.startsWith("com.android.settings")
+        }
+
         if (events != null) {
             val event = UsageEvents.Event()
             while (events.hasNextEvent()) {
@@ -82,28 +96,36 @@ class UsageLogRepository private constructor(private val context: Context) {
 
                 when (event.eventType) {
                     UsageEvents.Event.ACTIVITY_RESUMED -> {
+                        if (currentPkg == pkg) {
+                            // Intra-app transition (Feed -> Reel -> DM -> Story), continuous session
+                            continue
+                        }
                         val prev = currentPkg
-                        if (prev != null && prev != pkg) {
+                        if (prev != null) {
                             val duration = time - sessionStartMs
-                            // Record any session >= 3 seconds (ignores transient system flicker)
-                            if (duration >= 3000L) {
+                            if (duration >= 1000L) {
                                 rawSessions.add(RawSession(prev, sessionStartMs, time, duration))
                             }
                         }
-                        currentPkg = pkg
-                        sessionStartMs = time
+                        if (isLauncherOrSystemUI(pkg)) {
+                            // User went to home screen / launcher: end active app session, don't record launcher as app session
+                            currentPkg = null
+                            sessionStartMs = 0L
+                        } else {
+                            currentPkg = pkg
+                            sessionStartMs = time
+                        }
                     }
-                    UsageEvents.Event.ACTIVITY_PAUSED,
-                    UsageEvents.Event.ACTIVITY_STOPPED,
                     UsageEvents.Event.SCREEN_NON_INTERACTIVE,
                     UsageEvents.Event.KEYGUARD_SHOWN -> {
                         val active = currentPkg
-                        if (active != null && (active == pkg || event.eventType == UsageEvents.Event.SCREEN_NON_INTERACTIVE || event.eventType == UsageEvents.Event.KEYGUARD_SHOWN)) {
+                        if (active != null) {
                             val duration = time - sessionStartMs
-                            if (duration >= 3000L) {
+                            if (duration >= 1000L) {
                                 rawSessions.add(RawSession(active, sessionStartMs, time, duration))
                             }
                             currentPkg = null
+                            sessionStartMs = 0L
                         }
                     }
                 }
@@ -114,10 +136,29 @@ class UsageLogRepository private constructor(private val context: Context) {
         val activeAtEnd = currentPkg
         if (isToday && activeAtEnd != null && endOfDayMs > sessionStartMs) {
             val duration = endOfDayMs - sessionStartMs
-            if (duration >= 3000L) {
+            if (duration >= 1000L) {
                 rawSessions.add(RawSession(activeAtEnd, sessionStartMs, endOfDayMs, duration))
             }
         }
+
+        // Merge adjacent sessions for the same package with micro-gaps (<= 5 seconds)
+        val mergedSessions = mutableListOf<RawSession>()
+        for (session in rawSessions) {
+            val last = mergedSessions.lastOrNull()
+            if (last != null && last.packageName == session.packageName && (session.startMs - last.endMs) <= 5000L) {
+                mergedSessions[mergedSessions.size - 1] = RawSession(
+                    packageName = last.packageName,
+                    startMs = last.startMs,
+                    endMs = session.endMs,
+                    durationMs = session.endMs - last.startMs
+                )
+            } else {
+                mergedSessions.add(session)
+            }
+        }
+
+        // Filter out spurious micro-flickers under 3 seconds
+        val finalizedSessions = mergedSessions.filter { it.durationMs >= 3000L }
 
         val appNameCache = mutableMapOf<String, String>()
         fun resolveName(pkg: String): String {
@@ -149,7 +190,7 @@ class UsageLogRepository private constructor(private val context: Context) {
         var totalControlledMs = 0L
         val entries = mutableListOf<UsageLogEntry>()
 
-        for (session in rawSessions) {
+        for (session in finalizedSessions) {
             val pkg = session.packageName
             val isHost = pkg == context.packageName
             val isControlled = controlledPkgs.contains(pkg)
@@ -186,7 +227,7 @@ class UsageLogRepository private constructor(private val context: Context) {
         }
 
         // Calculate non-overlapping screen time for this day
-        val nonOverlappingIntervals = rawSessions.map { Pair(it.startMs, it.endMs) }.sortedBy { it.first }
+        val nonOverlappingIntervals = finalizedSessions.map { Pair(it.startMs, it.endMs) }.sortedBy { it.first }
         var mergedMs = 0L
         var curStart = -1L
         var curEnd = -1L
