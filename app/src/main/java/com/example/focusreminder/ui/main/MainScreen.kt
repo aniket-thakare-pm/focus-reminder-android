@@ -43,10 +43,18 @@ fun MainScreen(
     var analyticsFocusedPackage by remember { mutableStateOf<String?>(null) }
     var appSelectionInitialTab by remember { mutableStateOf<Int?>(0) }
     var showUsageLogsScreen by remember { mutableStateOf(false) }
+    var usageLogsInitialSector by remember { mutableStateOf<String?>(null) }
+    var usageLogsInitialPackage by remember { mutableStateOf<String?>(null) }
 
     if (showUsageLogsScreen) {
         UsageLogsScreen(
-            onBack = { showUsageLogsScreen = false },
+            initialSectorId = usageLogsInitialSector,
+            initialPackage = usageLogsInitialPackage,
+            onBack = {
+                showUsageLogsScreen = false
+                usageLogsInitialSector = null
+                usageLogsInitialPackage = null
+            },
             modifier = modifier.fillMaxSize()
         )
     } else {
@@ -99,7 +107,12 @@ fun MainScreen(
                     )
                     AppNavigationTab.ANALYTICS -> AnalyticsScreen(
                         initialPackage = analyticsFocusedPackage,
-                        onClearInitialPackage = { analyticsFocusedPackage = null }
+                        onClearInitialPackage = { analyticsFocusedPackage = null },
+                        onNavigateToUsageLogs = { sectorId, pkg ->
+                            usageLogsInitialSector = sectorId
+                            usageLogsInitialPackage = pkg
+                            showUsageLogsScreen = true
+                        }
                     )
                     AppNavigationTab.APPS -> AppSelectionScreen(
                         initialTab = appSelectionInitialTab,

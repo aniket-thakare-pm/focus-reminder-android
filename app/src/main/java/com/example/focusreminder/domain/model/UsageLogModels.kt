@@ -15,7 +15,10 @@ data class UsageLogEntry(
     val durationFormatted: String,    // e.g. "9m 12s" or "45s"
     val statusBadge: String,          // "In Use", "Blocker Screen", "Controlled"
     val isControlled: Boolean,
-    val isHostApp: Boolean
+    val isHostApp: Boolean,
+    val sectorId: String = "",
+    val sectorName: String = "",
+    val sectorColorLong: Long = 0xFF10B981L
 )
 
 data class UsageLogSummary(

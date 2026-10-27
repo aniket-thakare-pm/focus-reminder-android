@@ -23,6 +23,17 @@ class UsageLogsViewModel(application: Application) : AndroidViewModel(applicatio
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    // Sector Filter: null = "Any Time" (All Sectors), or "sector_morning", "sector_afternoon", "sector_evening", "sector_night"
+    private val _selectedSectorId = MutableStateFlow<String?>(null)
+    val selectedSectorId: StateFlow<String?> = _selectedSectorId.asStateFlow()
+
+    // Package Filter: specific app filter (e.g. redirected from Analytics app sector click)
+    private val _selectedPackageFilter = MutableStateFlow<String?>(null)
+    val selectedPackageFilter: StateFlow<String?> = _selectedPackageFilter.asStateFlow()
+
+    private val _selectedAppName = MutableStateFlow<String?>(null)
+    val selectedAppName: StateFlow<String?> = _selectedAppName.asStateFlow()
+
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -39,6 +50,30 @@ class UsageLogsViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun setSelectedSector(sectorId: String?) {
+        _selectedSectorId.value = sectorId
+    }
+
+    fun setInitialFilters(sectorId: String?, packageName: String?) {
+        _selectedSectorId.value = sectorId
+        if (!packageName.isNullOrBlank()) {
+            _selectedPackageFilter.value = packageName
+            val label = try {
+                val pm = getApplication<Application>().packageManager
+                val info = pm.getApplicationInfo(packageName, 0)
+                pm.getApplicationLabel(info).toString()
+            } catch (_: Exception) {
+                packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+            }
+            _selectedAppName.value = label
+        }
+    }
+
+    fun clearPackageFilter() {
+        _selectedPackageFilter.value = null
+        _selectedAppName.value = null
     }
 
     fun loadLogs() {

@@ -8,6 +8,7 @@ import com.example.focusreminder.domain.model.UsageLogEntry
 import com.example.focusreminder.domain.model.UsageLogSummary
 import com.example.focusreminder.platform.AppRestrictionRepository
 import com.example.focusreminder.platform.SystemPackageFilter
+import com.example.focusreminder.platform.analytics.SectorConfigStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -23,6 +24,7 @@ class UsageLogRepository private constructor(private val context: Context) {
     private val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
     private val pm: PackageManager = context.packageManager
     private val restrictionRepo = AppRestrictionRepository.getInstance(context)
+    private val sectorStore = SectorConfigStore.getInstance(context)
 
     companion object {
         @Volatile
@@ -200,6 +202,8 @@ class UsageLogRepository private constructor(private val context: Context) {
                 else -> "In Use"
             }
 
+            val sector = sectorStore.getSectorForTimestamp(session.startMs)
+
             entries.add(
                 UsageLogEntry(
                     id = "${pkg}_${session.startMs}",
@@ -212,7 +216,10 @@ class UsageLogRepository private constructor(private val context: Context) {
                     durationFormatted = formatDuration(session.durationMs),
                     statusBadge = statusBadge,
                     isControlled = isControlled,
-                    isHostApp = isHost
+                    isHostApp = isHost,
+                    sectorId = sector.id,
+                    sectorName = sector.name,
+                    sectorColorLong = sector.colorLong
                 )
             )
         }

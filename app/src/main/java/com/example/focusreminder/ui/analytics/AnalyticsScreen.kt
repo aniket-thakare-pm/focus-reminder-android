@@ -43,6 +43,7 @@ import java.util.Locale
 fun AnalyticsScreen(
     initialPackage: String? = null,
     onClearInitialPackage: () -> Unit = {},
+    onNavigateToUsageLogs: (sectorId: String, packageName: String?) -> Unit = { _, _ -> },
     viewModel: AnalyticsViewModel = viewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -399,6 +400,9 @@ fun AnalyticsScreen(
 
                                 SectorSegmentedBar(
                                     sectors = s.sectors,
+                                    onSectorClick = { sectorId ->
+                                        onNavigateToUsageLogs(sectorId, selectedPackage)
+                                    },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(14.dp)
@@ -411,15 +415,39 @@ fun AnalyticsScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        SectorLegendItem(stat = s.sectors.getOrNull(0), modifier = Modifier.weight(1f))
-                                        SectorLegendItem(stat = s.sectors.getOrNull(1), modifier = Modifier.weight(1f))
+                                        SectorLegendItem(
+                                            stat = s.sectors.getOrNull(0),
+                                            onClick = { stat ->
+                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        SectorLegendItem(
+                                            stat = s.sectors.getOrNull(1),
+                                            onClick = { stat ->
+                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        SectorLegendItem(stat = s.sectors.getOrNull(2), modifier = Modifier.weight(1f))
-                                        SectorLegendItem(stat = s.sectors.getOrNull(3), modifier = Modifier.weight(1f))
+                                        SectorLegendItem(
+                                            stat = s.sectors.getOrNull(2),
+                                            onClick = { stat ->
+                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        SectorLegendItem(
+                                            stat = s.sectors.getOrNull(3),
+                                            onClick = { stat ->
+                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                 }
                             }
@@ -1711,6 +1739,7 @@ fun AllowedAppsSelectionDialog(
 @Composable
 fun SectorSegmentedBar(
     sectors: List<SectorUsageStat>,
+    onSectorClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     NeuInsetWell(
@@ -1725,6 +1754,11 @@ fun SectorSegmentedBar(
                             .fillMaxHeight()
                             .weight(stat.percentage)
                             .background(Color(stat.sector.colorLong))
+                            .then(
+                                if (onSectorClick != null) {
+                                    Modifier.clickable { onSectorClick(stat.sector.id) }
+                                } else Modifier
+                            )
                     )
                 }
             }
@@ -1735,12 +1769,17 @@ fun SectorSegmentedBar(
 @Composable
 fun SectorLegendItem(
     stat: SectorUsageStat?,
+    onClick: ((SectorUsageStat) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (stat == null) return
     NeuInsetWell(
         cornerRadius = 12.dp,
-        modifier = modifier
+        modifier = modifier.then(
+            if (onClick != null) {
+                Modifier.clickable { onClick(stat) }
+            } else Modifier
+        )
     ) {
         Row(
             modifier = Modifier
