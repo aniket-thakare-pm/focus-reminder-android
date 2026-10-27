@@ -219,8 +219,13 @@ class UsageMonitorService : ComponentActivityService() {
                     }
                 }
 
-                // If phone is locked, screen is off, or user is in our app, skip enforcement
-                if (currentApp == null || currentApp == packageName) {
+                // If user is currently in Focus Reminder itself, skip enforcement
+                if (currentApp == packageName) {
+                    continue
+                }
+
+                // If no foreground app detected and no active session running, skip
+                if (currentApp == null && activeSessionPackage == null) {
                     continue
                 }
 
@@ -229,8 +234,15 @@ class UsageMonitorService : ComponentActivityService() {
                 // Check active session status
                 val activePkg = activeSessionPackage
                 if (activePkg != null) {
-                    if (currentApp == activePkg) {
-                        lastSeenActiveTimeMs = now
+                    val isCurrentMatch = currentApp == activePkg
+                    val isTransientNull = currentApp == null &&
+                            UsagePermissionHelper.isScreenInteractive(this@UsageMonitorService) &&
+                            (now - lastSeenActiveTimeMs) < 15_000L
+
+                    if (isCurrentMatch || isTransientNull) {
+                        if (isCurrentMatch) {
+                            lastSeenActiveTimeMs = now
+                        }
 
                         // If returning from temporary pause, resume session timer!
                         if (isSessionPaused) {
@@ -285,7 +297,7 @@ class UsageMonitorService : ComponentActivityService() {
                             continue
                         }
                     } else {
-                        // User closed or switched away from the restricted app!
+                        // User closed, locked phone, or switched away from the restricted app!
                         if (!isSessionPaused) {
                             // Pause the session immediately and DISMISS the timer notification from the notification bar!
                             isSessionPaused = true
@@ -308,6 +320,11 @@ class UsageMonitorService : ComponentActivityService() {
                             }
                         }
                     }
+                }
+
+                // If no foreground app is active, skip target package checks (focus goals, limits, cooldowns)
+                if (currentApp == null) {
+                    continue
                 }
 
                 // ================= FOCUS BUFFER / SCHEDULED GOAL ENFORCEMENT =================

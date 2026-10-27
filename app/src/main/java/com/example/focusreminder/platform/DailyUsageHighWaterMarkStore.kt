@@ -143,6 +143,39 @@ class DailyUsageHighWaterMarkStore private constructor(context: Context) {
     }
 
     /**
+     * Authoritatively recalibrates today's device screen time against true non-overlapping interactive intervals.
+     * If the stored high-water mark was inflated (e.g. earlier bug that summed background services),
+     * this resets it down to the ground-truth interactive screen time.
+     */
+    fun recalibrateScreenTimeToday(
+        trueInteractiveScreenTimeMs: Long,
+        dateKey: String = getTodayDateKey()
+    ): Long {
+        val key = "${PREFIX_SCREEN_TIME}$dateKey"
+        val current = prefs.getLong(key, 0L)
+
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val elapsedTodayMs = maxOf(0L, System.currentTimeMillis() - cal.timeInMillis)
+        val clampedCandidate = minOf(trueInteractiveScreenTimeMs, elapsedTodayMs)
+
+        // If stored value is wildly inflated compared to true interactive time (> 10 mins difference),
+        // authoritative recalibration replaces the relic value.
+        val finalVal = if (current > clampedCandidate + (10 * 60 * 1000L)) {
+            clampedCandidate
+        } else {
+            maxOf(current, clampedCandidate)
+        }
+
+        prefs.edit().putLong(key, finalVal).apply()
+        return finalVal
+    }
+
+    /**
      * Periodically cleans up keys older than [retentionDays] days.
      */
     private fun checkAndCleanOldDays(todayKey: String, retentionDays: Int = 7) {

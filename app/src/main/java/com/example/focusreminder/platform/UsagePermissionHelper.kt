@@ -85,4 +85,15 @@ object UsagePermissionHelper {
     fun hasNotificationPermission(context: Context): Boolean {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
+
+    /**
+     * Checks if the device screen is currently ON and unlocked (interactive).
+     */
+    fun isScreenInteractive(context: Context): Boolean {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        val isInteractive = powerManager?.isInteractive ?: true
+        val isLocked = keyguardManager?.isKeyguardLocked ?: false
+        return isInteractive && !isLocked
+    }
 }

@@ -1,8 +1,10 @@
 package com.example.focusreminder.platform
 
+import android.app.KeyguardManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.os.PowerManager
 import com.example.focusreminder.domain.model.UsageInterval
 import java.util.Calendar
 
@@ -19,8 +21,18 @@ class ForegroundAppDetector(private val context: Context) {
     private val usageStatsManager: UsageStatsManager? =
         context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
 
+    private val powerManager: PowerManager? =
+        context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+
+    private val keyguardManager: KeyguardManager? =
+        context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+
     private val highWaterMarkStore: DailyUsageHighWaterMarkStore =
         DailyUsageHighWaterMarkStore.getInstance(context)
+
+    // Cached active foreground package to maintain session continuity during continuous video/reading
+    private var cachedForegroundPackage: String? = null
+    private var cachedForegroundTimestampMs: Long = 0L
 
     /**
      * Queries foreground intervals for [targetPackageName] within [startTimeMs, endTimeMs].
@@ -92,47 +104,73 @@ class ForegroundAppDetector(private val context: Context) {
 
     /**
      * Returns the package name of the app currently in the foreground.
+     * Accurately preserves continuity during continuous media playback (YouTube) and reading.
      */
-    fun getForegroundPackageName(lookbackMs: Long = 60_000L): String? {
+    fun getForegroundPackageName(lookbackMs: Long = 300_000L): String? {
         val manager = usageStatsManager ?: return null
         val endTime = System.currentTimeMillis()
-        val startTime = endTime - lookbackMs
 
-        val events = manager.queryEvents(startTime, endTime)
+        // 1. If screen is off or keyguard is locked, foreground app is strictly null
+        val isInteractive = powerManager?.isInteractive ?: true
+        val isLocked = keyguardManager?.isKeyguardLocked ?: false
+        if (!isInteractive || isLocked) {
+            cachedForegroundPackage = null
+            return null
+        }
+
+        // 2. Query UsageEvents up to 5 minutes back (default) to catch the active session even without touches
+        val effectiveLookback = maxOf(lookbackMs, 300_000L)
+        val startTime = endTime - effectiveLookback
+
+        val events = try {
+            manager.queryEvents(startTime, endTime)
+        } catch (_: Exception) {
+            null
+        }
+
         val event = UsageEvents.Event()
         var lastResumedPackage: String? = null
 
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            when (event.eventType) {
-                UsageEvents.Event.ACTIVITY_RESUMED -> {
-                    lastResumedPackage = event.packageName
-                }
-                UsageEvents.Event.SCREEN_NON_INTERACTIVE -> {
-                    lastResumedPackage = null
-                }
-                UsageEvents.Event.KEYGUARD_SHOWN -> {
-                    lastResumedPackage = null
+        if (events != null) {
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                when (event.eventType) {
+                    UsageEvents.Event.ACTIVITY_RESUMED -> {
+                        lastResumedPackage = event.packageName
+                    }
+                    UsageEvents.Event.SCREEN_NON_INTERACTIVE,
+                    UsageEvents.Event.KEYGUARD_SHOWN -> {
+                        lastResumedPackage = null
+                    }
                 }
             }
         }
 
         if (lastResumedPackage != null) {
+            cachedForegroundPackage = lastResumedPackage
+            cachedForegroundTimestampMs = endTime
             return lastResumedPackage
         }
 
-        // Fallback: Check most recently used app in last 10 seconds
+        // 3. Continuity preservation: If screen is still on and no other app was resumed, maintain active package
+        if (cachedForegroundPackage != null && (endTime - cachedForegroundTimestampMs) < 600_000L) {
+            return cachedForegroundPackage
+        }
+
+        // 4. Fallback: Check most recently used app in last 15 seconds
         val statsList = manager.queryUsageStats(
             UsageStatsManager.INTERVAL_DAILY,
-            endTime - 10_000L,
+            endTime - 15_000L,
             endTime
         )
         val mostRecent = statsList?.maxByOrNull { it.lastTimeUsed }
-        if (mostRecent != null && (endTime - mostRecent.lastTimeUsed) < 6000L) {
+        if (mostRecent != null && (endTime - mostRecent.lastTimeUsed) < 15_000L) {
+            cachedForegroundPackage = mostRecent.packageName
+            cachedForegroundTimestampMs = endTime
             return mostRecent.packageName
         }
 
-        return null
+        return cachedForegroundPackage
     }
 
     /**
@@ -343,9 +381,10 @@ class ForegroundAppDetector(private val context: Context) {
 
     /**
      * Calculates total device screen time for today in minutes (across all user apps, strictly since midnight).
-     * Accurately reflects device total separate from individual apps.
+     * Accurately reflects true non-overlapping interactive screen-on time, preventing background service inflation.
      */
     fun getTotalScreenTimeTodayMinutes(): Int {
+        val manager = usageStatsManager ?: return 0
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -356,14 +395,97 @@ class ForegroundAppDetector(private val context: Context) {
         val nowMs = System.currentTimeMillis()
         val maxPossibleTodayMs = maxOf(0L, nowMs - midnightMs)
 
-        val allMap = queryReconciledDailyUsageMap()
-        val totalMs = allMap
-            .filterKeys { pkg -> !isSystemOrLauncherPackage(pkg) }
-            .values
-            .sum()
+        // Query ground-truth OS events from midnight to now
+        val events = try {
+            manager.queryEvents(midnightMs, nowMs)
+        } catch (_: Exception) {
+            null
+        }
 
-        val rawTotalMs = minOf(totalMs, maxPossibleTodayMs)
-        val verifiedTotalMs = highWaterMarkStore.updateScreenTimeHighWaterMarkMs(rawTotalMs)
+        val intervals = mutableListOf<Pair<Long, Long>>()
+        var currentSessionStart: Long? = null
+        var currentPkg: String? = null
+
+        if (events != null) {
+            val event = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val t = event.timeStamp
+                val pkg = event.packageName
+
+                when (event.eventType) {
+                    UsageEvents.Event.ACTIVITY_RESUMED -> {
+                        val activeStart = currentSessionStart
+                        val activePkg = currentPkg
+                        if (activeStart != null && activePkg != null && !isSystemOrLauncherPackage(activePkg)) {
+                            val start = maxOf(activeStart, midnightMs)
+                            val end = minOf(t, nowMs)
+                            if (end > start) {
+                                intervals.add(Pair(start, end))
+                            }
+                        }
+                        currentSessionStart = t
+                        currentPkg = pkg
+                    }
+                    UsageEvents.Event.ACTIVITY_PAUSED,
+                    UsageEvents.Event.ACTIVITY_STOPPED,
+                    UsageEvents.Event.SCREEN_NON_INTERACTIVE,
+                    UsageEvents.Event.KEYGUARD_SHOWN -> {
+                        val activeStart = currentSessionStart
+                        val activePkg = currentPkg
+                        if (activeStart != null && activePkg != null) {
+                            if (activePkg == pkg || event.eventType == UsageEvents.Event.SCREEN_NON_INTERACTIVE || event.eventType == UsageEvents.Event.KEYGUARD_SHOWN) {
+                                if (!isSystemOrLauncherPackage(activePkg)) {
+                                    val start = maxOf(activeStart, midnightMs)
+                                    val end = minOf(t, nowMs)
+                                    if (end > start) {
+                                        intervals.add(Pair(start, end))
+                                    }
+                                }
+                                currentSessionStart = null
+                                currentPkg = null
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Include current ongoing session if screen is on
+        val liveStart = currentSessionStart
+        val livePkg = currentPkg
+        if (liveStart != null && livePkg != null && !isSystemOrLauncherPackage(livePkg)) {
+            val start = maxOf(liveStart, midnightMs)
+            val end = nowMs
+            if (end > start) {
+                intervals.add(Pair(start, end))
+            }
+        }
+
+        // Merge all non-overlapping / contiguous intervals
+        val sorted = intervals.sortedBy { it.first }
+        var mergedDurationMs = 0L
+        var curStart = -1L
+        var curEnd = -1L
+
+        for (interval in sorted) {
+            if (curStart == -1L) {
+                curStart = interval.first
+                curEnd = interval.second
+            } else if (interval.first <= curEnd) {
+                curEnd = maxOf(curEnd, interval.second)
+            } else {
+                mergedDurationMs += (curEnd - curStart)
+                curStart = interval.first
+                curEnd = interval.second
+            }
+        }
+        if (curStart != -1L) {
+            mergedDurationMs += (curEnd - curStart)
+        }
+
+        val verifiedMs = minOf(mergedDurationMs, maxPossibleTodayMs)
+        val verifiedTotalMs = highWaterMarkStore.recalibrateScreenTimeToday(verifiedMs)
         return (verifiedTotalMs / (1000 * 60)).toInt()
     }
 

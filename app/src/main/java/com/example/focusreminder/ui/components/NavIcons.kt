@@ -609,3 +609,77 @@ fun WarningTriangleIcon(
         )
     }
 }
+
+/**
+ * Minimalist Vector Hamburger Menu Icon (3 horizontal bars, Zero Emojis).
+ */
+@Composable
+fun HamburgerVectorIcon(
+    color: Color = Color.Unspecified,
+    modifier: Modifier = Modifier.size(18.dp)
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.dp.toPx()
+        val lineSpacing = h * 0.32f
+        val startY = h * 0.18f
+
+        drawLine(
+            color = color,
+            start = Offset(w * 0.12f, startY),
+            end = Offset(w * 0.88f, startY),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.12f, startY + lineSpacing),
+            end = Offset(w * 0.88f, startY + lineSpacing),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(w * 0.12f, startY + lineSpacing * 2f),
+            end = Offset(w * 0.88f, startY + lineSpacing * 2f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+/**
+ * Minimalist Vector Back Arrow Icon (Zero Emojis).
+ */
+@Composable
+fun BackArrowVectorIcon(
+    color: Color = Color.Unspecified,
+    modifier: Modifier = Modifier.size(18.dp)
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.dp.toPx()
+
+        // Arrow head
+        val path = Path().apply {
+            moveTo(w * 0.55f, h * 0.22f)
+            lineTo(w * 0.25f, h * 0.50f)
+            lineTo(w * 0.55f, h * 0.78f)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        // Arrow body
+        drawLine(
+            color = color,
+            start = Offset(w * 0.25f, h * 0.50f),
+            end = Offset(w * 0.85f, h * 0.50f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}

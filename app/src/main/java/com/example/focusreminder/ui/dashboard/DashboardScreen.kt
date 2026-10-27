@@ -50,6 +50,7 @@ fun DashboardScreen(
     onNavigateToAlerts: () -> Unit = {},
     onNavigateToAnalytics: () -> Unit = {},
     onNavigateToAppAnalytics: (String) -> Unit = {},
+    onOpenUsageLogs: () -> Unit = {},
     onTestBlocker: () -> Unit,
     onTestStickyReminder: () -> Unit,
     modifier: Modifier = Modifier
@@ -77,6 +78,7 @@ fun DashboardScreen(
     // Real live app usage & device screen time from UsageStatsManager
     var actualAppUsageMap by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var totalDeviceScreenTimeMin by remember { mutableStateOf(0) }
+    var showHamburgerMenu by remember { mutableStateOf(false) }
 
     // Continuous live refresh every 3 seconds from OS UsageStatsManager
     LaunchedEffect(hasUsagePermission, updateKey, restrictedPackages) {
@@ -152,22 +154,44 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            // Hamburger Menu Box in top left
+            NeuCard(
+                onClick = { showHamburgerMenu = true },
+                cornerRadius = 12.dp,
+                elevation = 3.dp
+            ) {
+                Box(
+                    modifier = Modifier.size(38.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    HamburgerVectorIcon(
+                        color = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 10.dp)
+            ) {
                 Text(
                     text = "DAILY ATTENTION PACING",
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = EmeraldDark,
-                    letterSpacing = 2.sp
+                    letterSpacing = 1.4.sp
                 )
                 Text(
                     text = "Focus Dashboard",
-                    fontSize = 28.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Black,
                     color = TextPrimary,
-                    letterSpacing = (-0.8).sp
+                    letterSpacing = (-0.6).sp
                 )
             }
+
             // Theme Toggle Box in top right - clean box, icon only, no text
             NeuCard(
                 onClick = { ThemeManager.toggleTheme() },
@@ -770,5 +794,12 @@ fun DashboardScreen(
         }
 
         Spacer(modifier = Modifier.height(75.dp)) // Padding for bottom nav
+    }
+
+    if (showHamburgerMenu) {
+        HamburgerMenuDialog(
+            onDismiss = { showHamburgerMenu = false },
+            onOpenUsageLogs = onOpenUsageLogs
+        )
     }
 }

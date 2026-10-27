@@ -21,6 +21,7 @@ import com.example.focusreminder.ui.blocker.BlockerActivity
 import com.example.focusreminder.ui.components.*
 import com.example.focusreminder.ui.dashboard.DashboardScreen
 import com.example.focusreminder.ui.journal.JournalScreen
+import com.example.focusreminder.ui.logs.UsageLogsScreen
 import com.example.focusreminder.ui.reminder.StickyReminderActivity
 import com.example.focusreminder.ui.reminders.RemindersScreen
 
@@ -41,31 +42,39 @@ fun MainScreen(
     var currentTab by remember { mutableStateOf(AppNavigationTab.TIMER) }
     var analyticsFocusedPackage by remember { mutableStateOf<String?>(null) }
     var appSelectionInitialTab by remember { mutableStateOf<Int?>(0) }
+    var showUsageLogsScreen by remember { mutableStateOf(false) }
 
-    BioluminescentBackground(showGrid = false) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-        ) {
-            // Screen Content (Adapts cleanly to full screen width)
-            Crossfade(
-                targetState = currentTab,
-                label = "tab-crossfade",
-                modifier = Modifier.fillMaxSize()
-            ) { tab ->
-                when (tab) {
-                    AppNavigationTab.TIMER -> DashboardScreen(
-                        onNavigateToApps = {
-                            appSelectionInitialTab = 1
-                            currentTab = AppNavigationTab.APPS
-                        },
-                        onNavigateToAlerts = { currentTab = AppNavigationTab.ALERTS },
-                        onNavigateToAnalytics = { currentTab = AppNavigationTab.ANALYTICS },
-                        onNavigateToAppAnalytics = { pkg ->
-                            analyticsFocusedPackage = pkg
-                            currentTab = AppNavigationTab.ANALYTICS
-                        },
+    if (showUsageLogsScreen) {
+        UsageLogsScreen(
+            onBack = { showUsageLogsScreen = false },
+            modifier = modifier.fillMaxSize()
+        )
+    } else {
+        BioluminescentBackground(showGrid = false) {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+            ) {
+                // Screen Content (Adapts cleanly to full screen width)
+                Crossfade(
+                    targetState = currentTab,
+                    label = "tab-crossfade",
+                    modifier = Modifier.fillMaxSize()
+                ) { tab ->
+                    when (tab) {
+                        AppNavigationTab.TIMER -> DashboardScreen(
+                            onNavigateToApps = {
+                                appSelectionInitialTab = 1
+                                currentTab = AppNavigationTab.APPS
+                            },
+                            onNavigateToAlerts = { currentTab = AppNavigationTab.ALERTS },
+                            onNavigateToAnalytics = { currentTab = AppNavigationTab.ANALYTICS },
+                            onNavigateToAppAnalytics = { pkg ->
+                                analyticsFocusedPackage = pkg
+                                currentTab = AppNavigationTab.ANALYTICS
+                            },
+                            onOpenUsageLogs = { showUsageLogsScreen = true },
                         onTestBlocker = {
                             val intent = BlockerActivity.createIntent(
                                 context = context,
@@ -182,6 +191,7 @@ fun MainScreen(
             }
         }
     }
+}
 }
 
 @Composable
