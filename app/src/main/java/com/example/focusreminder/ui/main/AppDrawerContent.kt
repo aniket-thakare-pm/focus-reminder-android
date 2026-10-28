@@ -14,12 +14,14 @@ import androidx.compose.ui.unit.sp
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.ClockFaceIcon
 import com.example.focusreminder.ui.components.NavJournalIcon
+import com.example.focusreminder.ui.components.NavSquadIcon
 import com.example.focusreminder.ui.components.NeuCard
 
 @Composable
 fun AppDrawerContent(
     onSelectLogs: () -> Unit,
     onSelectJournal: () -> Unit,
+    onSelectSquad: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     ModalDrawerSheet(
@@ -134,11 +136,50 @@ fun AppDrawerContent(
                         )
                     }
                 }
+
+                // Item 3: Focus Squad (Clean, no description text as requested)
+                NeuCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onSelectSquad),
+                    cornerRadius = 16.dp,
+                    elevation = 3.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NavSquadIcon(
+                                color = EmeraldDark,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Focus Squad",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
+                        Text(
+                            text = "→",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
+                    }
+                }
             }
 
             // Version Footer
             Text(
-                text = "Focus Reminder v1.15.1",
+                text = "Focus Reminder v1.16.0",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = TextMuted,

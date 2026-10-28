@@ -26,6 +26,7 @@ import com.example.focusreminder.ui.journal.JournalScreen
 import com.example.focusreminder.ui.logs.UsageLogsScreen
 import com.example.focusreminder.ui.reminder.StickyReminderActivity
 import com.example.focusreminder.ui.reminders.RemindersScreen
+import com.example.focusreminder.ui.squad.SquadScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,6 +58,7 @@ fun MainScreen(
     var usageLogsInitialPackage by remember { mutableStateOf<String?>(null) }
 
     var showJournalScreen by remember { mutableStateOf(false) }
+    var showSquadScreen by remember { mutableStateOf(false) }
 
     // Pre-warm AppManager cache in background on startup (< 30ms warm-up)
     LaunchedEffect(Unit) {
@@ -76,6 +78,9 @@ fun MainScreen(
             currentTab = subScreenOriginTab
         } else if (showJournalScreen) {
             showJournalScreen = false
+            currentTab = subScreenOriginTab
+        } else if (showSquadScreen) {
+            showSquadScreen = false
             currentTab = subScreenOriginTab
         } else if (analyticsFocusedPackage != null) {
             analyticsFocusedPackage = null
@@ -107,6 +112,11 @@ fun MainScreen(
                     coroutineScope.launch { drawerState.close() }
                     subScreenOriginTab = currentTab
                     showJournalScreen = true
+                },
+                onSelectSquad = {
+                    coroutineScope.launch { drawerState.close() }
+                    subScreenOriginTab = currentTab
+                    showSquadScreen = true
                 }
             )
         }
@@ -127,6 +137,14 @@ fun MainScreen(
             JournalScreen(
                 onBack = {
                     showJournalScreen = false
+                    currentTab = subScreenOriginTab
+                },
+                modifier = modifier.fillMaxSize()
+            )
+        } else if (showSquadScreen) {
+            SquadScreen(
+                onBack = {
+                    showSquadScreen = false
                     currentTab = subScreenOriginTab
                 },
                 modifier = modifier.fillMaxSize()

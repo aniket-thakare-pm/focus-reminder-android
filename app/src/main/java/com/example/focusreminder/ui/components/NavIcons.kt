@@ -683,3 +683,72 @@ fun BackArrowVectorIcon(
         )
     }
 }
+
+/**
+ * Minimalist Vector Squad / Friends Group Icon (Zero Emojis).
+ */
+@Composable
+fun NavSquadIcon(
+    color: Color = Color.Unspecified,
+    modifier: Modifier = Modifier.size(22.dp)
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.6.dp.toPx()
+
+        // Center Person (Leader) Head
+        drawCircle(
+            color = color,
+            radius = w * 0.14f,
+            center = Offset(w * 0.5f, h * 0.26f),
+            style = Stroke(width = stroke)
+        )
+        // Center Person Body Arc
+        val centerBodyPath = Path().apply {
+            moveTo(w * 0.28f, h * 0.65f)
+            quadraticTo(w * 0.5f, h * 0.44f, w * 0.72f, h * 0.65f)
+        }
+        drawPath(
+            path = centerBodyPath,
+            color = color,
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+
+        // Left Person Head
+        drawCircle(
+            color = color.copy(alpha = 0.7f),
+            radius = w * 0.10f,
+            center = Offset(w * 0.22f, h * 0.38f),
+            style = Stroke(width = stroke)
+        )
+        // Left Person Body Arc
+        val leftBodyPath = Path().apply {
+            moveTo(w * 0.08f, h * 0.76f)
+            quadraticTo(w * 0.22f, h * 0.56f, w * 0.36f, h * 0.76f)
+        }
+        drawPath(
+            path = leftBodyPath,
+            color = color.copy(alpha = 0.7f),
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+
+        // Right Person Head
+        drawCircle(
+            color = color.copy(alpha = 0.7f),
+            radius = w * 0.10f,
+            center = Offset(w * 0.78f, h * 0.38f),
+            style = Stroke(width = stroke)
+        )
+        // Right Person Body Arc
+        val rightBodyPath = Path().apply {
+            moveTo(w * 0.64f, h * 0.76f)
+            quadraticTo(w * 0.78f, h * 0.56f, w * 0.92f, h * 0.76f)
+        }
+        drawPath(
+            path = rightBodyPath,
+            color = color.copy(alpha = 0.7f),
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+    }
+}

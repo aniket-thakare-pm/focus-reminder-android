@@ -218,6 +218,24 @@
 * **Consequence**:
   Seamless Neumorphic light and shadow blending with zero horizontal seam cuts, perfectly symmetrical controls, and sleek, compact inputs.
 
+### ADR-009: 5-Member Focus Squad Architecture & Offline Preview (v1.16.0)
+* **Date**: 2026-10-28
+* **Context**:
+  1. Users requested a peer accountability leaderboard restricted to small circles (max 5 members) to guarantee healthy rotation at the top.
+  2. The primary ranking metric had to be Self-Improvement Delta ("better than yesterday's self") rather than raw phone time or artificial point formulas.
+  3. Cloud DB and authentication are planned for Phase 2; Phase 1 requires a fully functioning local/offline architecture capable of holding 1 to 5 members with the current user's live hardware statistics.
+* **Decision**:
+  1. **5-Member Squad Domain Model**: Created `SquadMember` and `SquadInfo` in `domain/model/SquadModels.kt`, tracking live total screen time, monitored distraction time, yesterday's baseline, and delta improvement.
+  2. **SquadRepository**: Pulls the current user's live daily usage directly from SQLite/UsageEvents and calculates real delta vs yesterday, providing up to 4 squad slots ready for cloud sync.
+  3. **Infographics Suite**:
+     - `SquadPactHalo`: 5-arc circular dial showing collective squad health.
+     - `SymmetricalPodiumView`: Symmetrical mountain pyramid `[ 4, 2, 1, 3, 5 ]` where #1 improvement champion stands tallest in the exact center.
+     - `DistractedVsTotalChart`: Horizon bar chart comparing all 5 friends ranked by lowest distraction time, with full total screen time visible in slate.
+     - `YesterdayVsTodayOverlapChart`: Direct visual correlation overlaying solid today bar over low-opacity ghost yesterday baseline.
+  4. **Navigation Integration**: Added "Focus Squad" to the left sliding drawer (`AppDrawerContent`) and integrated with Android `BackHandler` in `MainScreen`.
+* **Consequence**:
+  Provides a complete, offline-capable 5-member peer comparison experience grounded in real human numbers, with zero cloud dependency and zero backend overhead in Phase 1.
+
 ---
 
 ## 3. Schema & Cache Version Matrix
@@ -228,7 +246,7 @@
 | **`JournalDatabaseHelper`** (`focus_reflections.db`) | **`v1`** | Persistent SQLite storage for emergency unblock reflective journal entries and answers. |
 | **`DailyUsageHighWaterMarkStore`** (`daily_usage_high_water_mark_prefs`) | **`v5`** | Auto-purges legacy cached high-water marks from previous versions on app launch. |
 | **`SectorConfigStore`** (`focus_sector_config_prefs`) | **`v1`** | Stores 2 to 6 custom time sectors with startMinute and endMinute bounds. |
-| **`app/build.gradle.kts`** | **`v1.15.1`** (vc: `23`) | Current production-ready build. |
+| **`app/build.gradle.kts`** | **`v1.16.0`** (vc: `24`) | Current production-ready build. |
 
 ---
 
