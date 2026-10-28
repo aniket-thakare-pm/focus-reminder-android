@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -219,100 +221,113 @@ fun UsageLogsScreen(
             }
         }
 
-        // ================= STICKY SECTION 2: 1ST BOX (SUMMARY CARD LOCKED ON TOP) =================
-        NeuCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 18.dp,
-            elevation = 4.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "TOTAL SCREEN TIME",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted,
-                        letterSpacing = 0.8.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    val hours = displayScreenMinutes / 60
-                    val mins = displayScreenMinutes % 60
-                    Text(
-                        text = if (hours > 0) "${hours}h ${mins}m" else "${mins}m",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        color = EmeraldDark
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(30.dp)
-                        .background(NeuSurfaceSunken)
-                )
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "CONTROLLED",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted,
-                        letterSpacing = 0.8.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    val cHours = displayControlledMinutes / 60
-                    val cMins = displayControlledMinutes % 60
-                    Text(
-                        text = if (cHours > 0) "${cHours}h ${cMins}m" else "${cMins}m",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFFD97706)
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(30.dp)
-                        .background(NeuSurfaceSunken)
-                )
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "SESSIONS",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted,
-                        letterSpacing = 0.8.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "$displaySessionsCount",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        color = TextPrimary
-                    )
-                }
-            }
-        }
-
-        // ================= SCROLLABLE CONTENT (DATE STEPPER, FILTERS, SEARCH, LOGS SCROLL UP) =================
+        // ================= SCROLLABLE CONTENT (UNIFIED NEUMORPHIC SURFACE) =================
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 80.dp)
+            contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
         ) {
-            // Item 1: Multi-Day Stepper & Calendar Modal Trigger
-            item {
+            // Item 1: Summary Card (Unified Neumorphic Surface, Equal 1/3 Widths, "TOTAL")
+            item(key = "summary_card") {
+                NeuCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 18.dp,
+                    elevation = 3.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp, horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Section 1: Total (Equal 1/3 width)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "TOTAL",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            val hours = displayScreenMinutes / 60
+                            val mins = displayScreenMinutes % 60
+                            Text(
+                                text = if (hours > 0) "${hours}h ${mins}m" else "${mins}m",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = EmeraldDark
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(26.dp)
+                                .background(NeuSurfaceSunken)
+                        )
+
+                        // Section 2: Controlled (Equal 1/3 width)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "CONTROLLED",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            val cHours = displayControlledMinutes / 60
+                            val cMins = displayControlledMinutes % 60
+                            Text(
+                                text = if (cHours > 0) "${cHours}h ${cMins}m" else "${cMins}m",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFD97706)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(26.dp)
+                                .background(NeuSurfaceSunken)
+                        )
+
+                        // Section 3: Sessions (Equal 1/3 width)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "SESSIONS",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$displaySessionsCount",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = TextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Item 2: Multi-Day Stepper & Calendar Modal Trigger (36dp Sleek Height, Centered Date, No Calendar Text)
+            item(key = "date_stepper") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -320,37 +335,32 @@ fun UsageLogsScreen(
                 ) {
                     NeuPill(
                         onClick = { viewModel.stepDateOffset(-1) },
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(36.dp),
+                        cornerRadius = 12.dp
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("◀", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text("<", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         }
                     }
 
                     NeuCard(
                         onClick = { showCalendarDialog = true },
-                        modifier = Modifier.weight(1f),
-                        cornerRadius = 14.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp),
+                        cornerRadius = 12.dp,
                         elevation = 2.dp
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 10.dp, horizontal = 14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = dateDisplayLabel,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (dateOffset == 0) EmeraldDark else TextPrimary
-                            )
-                            Text(
-                                text = "📅 Calendar",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextMuted
+                                color = if (dateOffset == 0) EmeraldDark else TextPrimary,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -358,13 +368,14 @@ fun UsageLogsScreen(
                     val canStepForward = dateOffset < 0
                     NeuPill(
                         onClick = { if (canStepForward) viewModel.stepDateOffset(1) },
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(36.dp),
+                        cornerRadius = 12.dp,
                         backgroundColor = if (canStepForward) NeuBackground else NeuBackground.copy(alpha = 0.5f)
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "▶",
-                                fontSize = 12.sp,
+                                text = ">",
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (canStepForward) TextPrimary else TextMuted.copy(alpha = 0.3f)
                             )
@@ -373,8 +384,8 @@ fun UsageLogsScreen(
                 }
             }
 
-            // Item 2: Tier 1 Scope Bar (All Day vs Custom Window)
-            item {
+            // Item 3: Tier 1 Scope Bar (All Day vs Custom Window - Equal 50/50 Widths, 36dp Height)
+            item(key = "scope_bar") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -385,12 +396,13 @@ fun UsageLogsScreen(
                         elevation = if (isAllDayActive) 3.dp else 1.dp,
                         borderColor = if (isAllDayActive) EmeraldDark.copy(alpha = 0.6f) else null,
                         onClick = { viewModel.resetAllTimeFilters() },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp),
+                        cornerRadius = 12.dp
                     ) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
+                            modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -407,12 +419,15 @@ fun UsageLogsScreen(
                         elevation = if (isCustomActive) 3.dp else 1.dp,
                         borderColor = if (isCustomActive) Color(0xFF8B5CF6).copy(alpha = 0.6f) else null,
                         onClick = { showTimeRangeDialog = true },
-                        modifier = Modifier.weight(1.4f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp),
+                        cornerRadius = 12.dp
                     ) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp, horizontal = 10.dp),
+                                .fillMaxSize()
+                                .padding(horizontal = 8.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -424,9 +439,9 @@ fun UsageLogsScreen(
                                 maxLines = 1
                             )
                             if (isCustomActive) {
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "×",
+                                    text = "x",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Black,
                                     color = Color(0xFFEF4444),
@@ -544,20 +559,48 @@ fun UsageLogsScreen(
                 }
             }
 
-            // Item 5: Search Input
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.setSearchQuery(it) },
-                    placeholder = { Text("Filter by app (e.g. YouTube)...", fontSize = 12.sp, color = TextMuted) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = EmeraldDark
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+            // Item 5: Compact 38dp Sunken Search Bar
+            item(key = "search_bar") {
+                NeuInsetWell(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp),
+                    cornerRadius = 12.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SearchVectorIcon(
+                            color = TextMuted,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontSize = 12.sp,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Filter by app (e.g. YouTube)...",
+                                        color = TextMuted,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
+                }
             }
 
             // Item 6+: Session Entries or Empty State

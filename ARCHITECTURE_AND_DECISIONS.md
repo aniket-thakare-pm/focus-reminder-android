@@ -201,6 +201,23 @@
 * **Consequence**:
   Instant tab switching, customizable sector partitions with accurate time window filtering, robust SQLite journal history, and intuitive back navigation.
 
+### ADR-008: Neumorphic Lighting Harmony & Unified Layout Polish (v1.15.1)
+* **Date**: 2026-10-28
+* **Context**:
+  1. In the Logbook, the Summary Card columns ("Total Screen Time", "Controlled", "Sessions") had non-uniform widths and "TOTAL SCREEN TIME" took excessive width.
+  2. The Date Stepper button displayed redundant text ("📅 Calendar") and was needlessly tall.
+  3. The Scope pills ("All Day" and "Custom Window") had asymmetrical widths (1f vs 1.4f).
+  4. Search bars in both Logbook and App Selection were too tall (~56-64dp) due to default OutlinedTextField constraints.
+  5. The separate clipping boundaries between the fixed summary card and the scrollable list produced a sharp horizontal cut line where the summary card's bottom dark shadow and the stepper's top-left white highlight collided and were clipped.
+* **Decision**:
+  1. **Unified Neumorphic Surface**: Placed the Summary Card inside `LazyColumn` as item 1 so all buttons and cards share the exact same lighting coordinate system and draw canvas, eliminating all clipping seams.
+  2. **1/3 Symmetrical Summary Card**: Renamed "TOTAL SCREEN TIME" to "TOTAL", applied `Modifier.weight(1f)` to each of the 3 metric columns, creating exact 1/3 column widths.
+  3. **36dp Sleek Date Stepper**: Centered the date display text horizontally, removed "📅 Calendar" text entirely, and unified the stepper height to 36dp.
+  4. **50/50 Uniform Scope Pills**: Set both "All Day" and "Custom Window" pills to equal `Modifier.weight(1f)` with 36dp height.
+  5. **Compact 38dp Sunken Inset Search Bars**: Replaced bulky OutlinedTextField instances with compact 38dp `NeuInsetWell` + `BasicTextField` across both Logbook and App Selection screens.
+* **Consequence**:
+  Seamless Neumorphic light and shadow blending with zero horizontal seam cuts, perfectly symmetrical controls, and sleek, compact inputs.
+
 ---
 
 ## 3. Schema & Cache Version Matrix
@@ -211,7 +228,7 @@
 | **`JournalDatabaseHelper`** (`focus_reflections.db`) | **`v1`** | Persistent SQLite storage for emergency unblock reflective journal entries and answers. |
 | **`DailyUsageHighWaterMarkStore`** (`daily_usage_high_water_mark_prefs`) | **`v5`** | Auto-purges legacy cached high-water marks from previous versions on app launch. |
 | **`SectorConfigStore`** (`focus_sector_config_prefs`) | **`v1`** | Stores 2 to 6 custom time sectors with startMinute and endMinute bounds. |
-| **`app/build.gradle.kts`** | **`v1.15.0`** (vc: `22`) | Current production-ready build. |
+| **`app/build.gradle.kts`** | **`v1.15.1`** (vc: `23`) | Current production-ready build. |
 
 ---
 

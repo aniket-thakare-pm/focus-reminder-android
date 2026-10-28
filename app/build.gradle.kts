@@ -11,8 +11,8 @@ android {
         applicationId = "com.productivity.focusreminder"
         minSdk = 29
         targetSdk = 36
-        versionCode = 22
-        versionName = "1.15.0"
+        versionCode = 23
+        versionName = "1.15.1"
     }
 
     buildTypes {

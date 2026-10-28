@@ -138,7 +138,7 @@ fun AppDrawerContent(
 
             // Version Footer
             Text(
-                text = "Focus Reminder v1.15.0",
+                text = "Focus Reminder v1.15.1",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = TextMuted,

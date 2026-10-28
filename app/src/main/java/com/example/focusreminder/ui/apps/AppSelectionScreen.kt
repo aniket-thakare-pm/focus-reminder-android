@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -144,39 +146,44 @@ fun AppSelectionScreen(
             }
         }
 
-        // Sunken Inset Search Bar
+        // Sunken Inset Search Bar (Compact 38dp Height)
         NeuInsetWell(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 18.dp
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp),
+            cornerRadius = 12.dp
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SearchVectorIcon(color = TextMuted)
-                OutlinedTextField(
+                SearchVectorIcon(
+                    color = TextMuted,
+                    modifier = Modifier.size(15.dp)
+                )
+                BasicTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            text = "Search Instagram, YouTube, Reddit...",
-                            color = TextMuted,
-                            fontSize = 13.sp
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 12.sp,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Medium
                     ),
-                    singleLine = true
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { innerTextField ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = "Search Instagram, YouTube, Reddit...",
+                                color = TextMuted,
+                                fontSize = 12.sp
+                            )
+                        }
+                        innerTextField()
+                    }
                 )
             }
         }
