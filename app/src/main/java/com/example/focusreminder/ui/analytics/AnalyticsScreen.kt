@@ -44,6 +44,7 @@ fun AnalyticsScreen(
     initialPackage: String? = null,
     onClearInitialPackage: () -> Unit = {},
     onNavigateToUsageLogs: (sectorId: String, packageName: String?) -> Unit = { _, _ -> },
+    onOpenDrawer: (() -> Unit)? = null,
     viewModel: AnalyticsViewModel = viewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -76,18 +77,41 @@ fun AnalyticsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // ================= HEADER =================
-        Column {
-            Text(
-                text = "Analytics",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                color = TextPrimary
-            )
-            Text(
-                text = "Comprehensive phone usage & sector insights",
-                fontSize = 11.sp,
-                color = TextMuted
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (onOpenDrawer != null) {
+                NeuCard(
+                    onClick = onOpenDrawer,
+                    cornerRadius = 12.dp,
+                    elevation = 3.dp
+                ) {
+                    Box(
+                        modifier = Modifier.size(38.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        HamburgerVectorIcon(
+                            color = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+            Column {
+                Text(
+                    text = "Analytics",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Comprehensive phone usage & sector insights",
+                    fontSize = 11.sp,
+                    color = TextMuted
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -411,43 +435,30 @@ fun AnalyticsScreen(
                                 Spacer(modifier = Modifier.height(14.dp))
 
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        SectorLegendItem(
-                                            stat = s.sectors.getOrNull(0),
-                                            onClick = { stat ->
-                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        SectorLegendItem(
-                                            stat = s.sectors.getOrNull(1),
-                                            onClick = { stat ->
-                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        SectorLegendItem(
-                                            stat = s.sectors.getOrNull(2),
-                                            onClick = { stat ->
-                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        SectorLegendItem(
-                                            stat = s.sectors.getOrNull(3),
-                                            onClick = { stat ->
-                                                onNavigateToUsageLogs(stat.sector.id, selectedPackage)
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                    s.sectors.chunked(2).forEach { rowPair ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            SectorLegendItem(
+                                                stat = rowPair.getOrNull(0),
+                                                onClick = { stat ->
+                                                    onNavigateToUsageLogs(stat.sector.id, selectedPackage)
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            if (rowPair.size > 1) {
+                                                SectorLegendItem(
+                                                    stat = rowPair.getOrNull(1),
+                                                    onClick = { stat ->
+                                                        onNavigateToUsageLogs(stat.sector.id, selectedPackage)
+                                                    },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
                                     }
                                 }
                             }

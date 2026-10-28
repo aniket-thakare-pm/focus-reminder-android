@@ -34,6 +34,7 @@ import java.util.Calendar
 @Composable
 fun RemindersScreen(
     onPreviewSticky: () -> Unit = {},
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -56,20 +57,43 @@ fun RemindersScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                Text(
-                    text = "FEATURE E & F: RICH ALERTS",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = EmeraldDark,
-                    letterSpacing = 1.6.sp
-                )
-                Text(
-                    text = "High-Attention Reminders",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black,
-                    color = TextPrimary
-                )
+            Row(
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (onOpenDrawer != null) {
+                    NeuCard(
+                        onClick = onOpenDrawer,
+                        cornerRadius = 12.dp,
+                        elevation = 3.dp
+                    ) {
+                        Box(
+                            modifier = Modifier.size(38.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            HamburgerVectorIcon(
+                                color = TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+                Column {
+                    Text(
+                        text = "FEATURE E & F: RICH ALERTS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = EmeraldDark,
+                        letterSpacing = 1.6.sp
+                    )
+                    Text(
+                        text = "High-Attention Reminders",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black,
+                        color = TextPrimary
+                    )
+                }
             }
             NeuPill(
                 onClick = { showCreateDialog = true }

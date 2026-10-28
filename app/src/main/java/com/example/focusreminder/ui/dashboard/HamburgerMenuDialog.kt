@@ -14,6 +14,7 @@ import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.ClockFaceIcon
 import com.example.focusreminder.ui.components.NeuCard
 
+@Deprecated("Replaced by left sliding AppDrawerContent in v1.15.0")
 @Composable
 fun HamburgerMenuDialog(
     onDismiss: () -> Unit,

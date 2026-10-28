@@ -20,9 +20,23 @@ data class UsageSession(
 data class TimeSector(
     val id: String,
     val name: String,
-    val startHour: Int, // 0..23
-    val endHour: Int,   // 0..23 (can wrap around midnight, e.g. 22 to 6)
+    val startHour: Int,       // 0..23
+    val startMinute: Int = 0, // 0..59
+    val endHour: Int,         // 0..23 (can wrap around midnight, e.g. 22 to 6)
+    val endMinute: Int = 0,   // 0..59
     val colorLong: Long
+)
+
+/**
+ * A persistent reflective journal entry recorded during an intentional emergency override.
+ */
+data class JournalReflectionRecord(
+    val id: Long = 0,
+    val timestampMs: Long,
+    val packageName: String,
+    val appName: String,
+    val requestedMinutes: Int,
+    val answers: List<String>
 )
 
 enum class AnalyticsTimeframe {

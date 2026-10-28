@@ -51,6 +51,7 @@ fun DashboardScreen(
     onNavigateToAnalytics: () -> Unit = {},
     onNavigateToAppAnalytics: (String) -> Unit = {},
     onOpenUsageLogs: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {},
     onTestBlocker: () -> Unit,
     onTestStickyReminder: () -> Unit,
     modifier: Modifier = Modifier
@@ -78,7 +79,6 @@ fun DashboardScreen(
     // Real live app usage & device screen time from UsageStatsManager
     var actualAppUsageMap by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var totalDeviceScreenTimeMin by remember { mutableStateOf(0) }
-    var showHamburgerMenu by remember { mutableStateOf(false) }
 
     // Continuous live refresh every 3 seconds from OS UsageStatsManager
     LaunchedEffect(hasUsagePermission, updateKey, restrictedPackages) {
@@ -156,7 +156,7 @@ fun DashboardScreen(
         ) {
             // Hamburger Menu Box in top left
             NeuCard(
-                onClick = { showHamburgerMenu = true },
+                onClick = onOpenDrawer,
                 cornerRadius = 12.dp,
                 elevation = 3.dp
             ) {
@@ -794,12 +794,5 @@ fun DashboardScreen(
         }
 
         Spacer(modifier = Modifier.height(75.dp)) // Padding for bottom nav
-    }
-
-    if (showHamburgerMenu) {
-        HamburgerMenuDialog(
-            onDismiss = { showHamburgerMenu = false },
-            onOpenUsageLogs = onOpenUsageLogs
-        )
     }
 }

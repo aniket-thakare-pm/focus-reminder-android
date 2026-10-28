@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,15 +27,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.focusreminder.domain.model.UsageLogEntry
+import com.example.focusreminder.platform.analytics.SectorConfigStore
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.*
-
-private data class SectorFilterOption(
-    val id: String?,
-    val name: String,
-    val timeRange: String,
-    val colorLong: Long
-)
+import java.util.Calendar
+import java.util.Locale
 
 @Composable
 fun UsageLogsScreen(
@@ -48,12 +45,20 @@ fun UsageLogsScreen(
     val dateOffset by viewModel.selectedDateOffset.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedSectorId by viewModel.selectedSectorId.collectAsState()
+    val customTimeRange by viewModel.customTimeRange.collectAsState()
+    val customTimeRangeFormatted by viewModel.customTimeRangeFormatted.collectAsState()
     val selectedPackageFilter by viewModel.selectedPackageFilter.collectAsState()
     val selectedAppName by viewModel.selectedAppName.collectAsState()
+    val sectors by viewModel.sectors.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     val context = LocalContext.current
     val pm = remember { context.packageManager }
+    val sectorStore = remember { SectorConfigStore.getInstance(context) }
+
+    var showCalendarDialog by remember { mutableStateOf(false) }
+    var showTimeRangeDialog by remember { mutableStateOf(false) }
+    var showSectorEditor by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialSectorId, initialPackage) {
         if (initialSectorId != null || !initialPackage.isNullOrBlank()) {
@@ -61,23 +66,53 @@ fun UsageLogsScreen(
         }
     }
 
-    val filteredLogs = remember(summary, searchQuery, selectedSectorId, selectedPackageFilter) {
+    // Accurate interval-intersection filter across ALL sectors and custom time windows
+    val filteredLogs = remember(summary, searchQuery, selectedSectorId, customTimeRange, selectedPackageFilter, sectors) {
         val all = summary?.logs ?: emptyList()
+        val activeSector = sectors.find { it.id == selectedSectorId }
+
         all.filter { entry ->
-            val matchesSector = selectedSectorId == null || entry.sectorId == selectedSectorId
+            val matchesSectorOrTime = when {
+                activeSector != null -> sectorStore.isSessionInSector(entry.startTimeMs, entry.endTimeMs, activeSector)
+                customTimeRange != null -> {
+                    val cal = Calendar.getInstance().apply {
+                        timeInMillis = entry.startTimeMs
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    val midnightMs = cal.timeInMillis
+                    val windowStart = midnightMs + (customTimeRange!!.first * 60 * 1000L)
+                    val windowEnd = midnightMs + (customTimeRange!!.second * 60 * 1000L)
+                    val effectiveEnd = maxOf(entry.endTimeMs, entry.startTimeMs + 1000L)
+
+                    if (windowStart <= windowEnd) {
+                        maxOf(entry.startTimeMs, windowStart) < minOf(effectiveEnd, windowEnd)
+                    } else {
+                        // Wraps midnight
+                        val morningSlice = maxOf(entry.startTimeMs, midnightMs) < minOf(effectiveEnd, windowEnd)
+                        val eveningSlice = maxOf(entry.startTimeMs, windowStart) < minOf(effectiveEnd, midnightMs + 24 * 3600000L)
+                        morningSlice || eveningSlice
+                    }
+                }
+                else -> true
+            }
+
             val matchesPackage = selectedPackageFilter == null || entry.packageName == selectedPackageFilter
             val matchesSearch = searchQuery.isBlank() ||
                     entry.appName.contains(searchQuery, ignoreCase = true) ||
                     entry.packageName.contains(searchQuery, ignoreCase = true)
-            matchesSector && matchesPackage && matchesSearch
+
+            matchesSectorOrTime && matchesPackage && matchesSearch
         }
     }
 
-    // Dynamic metrics tailored to active sector/app filter
+    // Dynamic metrics tailored to active sector/time/app filter
     val (displayScreenMinutes, displayControlledMinutes, displaySessionsCount) = remember(
-        filteredLogs, summary, selectedSectorId, selectedPackageFilter, searchQuery
+        filteredLogs, summary, selectedSectorId, customTimeRange, selectedPackageFilter, searchQuery
     ) {
-        val hasActiveFilter = selectedSectorId != null || selectedPackageFilter != null || searchQuery.isNotBlank()
+        val hasActiveFilter = selectedSectorId != null || customTimeRange != null || selectedPackageFilter != null || searchQuery.isNotBlank()
         if (!hasActiveFilter && summary != null) {
             Triple(summary!!.totalScreenTimeMinutes, summary!!.controlledUsageMinutes, summary!!.totalSessionsCount)
         } else {
@@ -105,14 +140,14 @@ fun UsageLogsScreen(
         }
     }
 
-    val sectorOptions = remember {
-        listOf(
-            SectorFilterOption(null, "Any Time", "All Day", 0xFF64748BL),
-            SectorFilterOption("sector_morning", "Morning", "06:00–12:00", 0xFF10B981L),
-            SectorFilterOption("sector_afternoon", "Afternoon", "12:00–17:00", 0xFFF59E0BL),
-            SectorFilterOption("sector_evening", "Evening", "17:00–22:00", 0xFF8B5CF6L),
-            SectorFilterOption("sector_night", "Night", "22:00–06:00", 0xFFEC4899L)
-        )
+    fun formatSectorTime(s: com.example.focusreminder.domain.model.TimeSector): String {
+        return String.format(Locale.getDefault(), "%02d:%02d–%02d:%02d", s.startHour, s.startMinute, s.endHour, s.endMinute)
+    }
+
+    val dateDisplayLabel = when (dateOffset) {
+        0 -> "Today"
+        -1 -> "Yesterday"
+        else -> summary?.dateLabel ?: "Day $dateOffset"
     }
 
     Column(
@@ -121,11 +156,11 @@ fun UsageLogsScreen(
             .background(NeuBackground)
             .statusBarsPadding()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Spacer(modifier = Modifier.height(2.dp))
 
-        // Top Navigation Header
+        // ================= STICKY SECTION 1: TOP NAVIGATION HEADER =================
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -184,7 +219,7 @@ fun UsageLogsScreen(
             }
         }
 
-        // Summary Card (Dynamically updates based on active filters)
+        // ================= STICKY SECTION 2: 1ST BOX (SUMMARY CARD LOCKED ON TOP) =================
         NeuCard(
             modifier = Modifier.fillMaxWidth(),
             cornerRadius = 18.dp,
@@ -268,201 +303,340 @@ fun UsageLogsScreen(
             }
         }
 
-        // Date Stepper Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            NeuPill(
-                modifier = Modifier.weight(1f),
-                elevation = if (dateOffset == 0) 4.dp else 1.dp,
-                borderColor = if (dateOffset == 0) EmeraldDark.copy(alpha = 0.4f) else null,
-                onClick = { viewModel.setDateOffset(0) }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 9.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Today",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (dateOffset == 0) EmeraldDark else TextMuted
-                    )
-                }
-            }
-
-            NeuPill(
-                modifier = Modifier.weight(1f),
-                elevation = if (dateOffset == -1) 4.dp else 1.dp,
-                borderColor = if (dateOffset == -1) EmeraldDark.copy(alpha = 0.4f) else null,
-                onClick = { viewModel.setDateOffset(-1) }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 9.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Yesterday",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (dateOffset == -1) EmeraldDark else TextMuted
-                    )
-                }
-            }
-        }
-
-        // Sector Filter Bar (Any Time | Morning | Afternoon | Evening | Night)
-        Row(
+        // ================= SCROLLABLE CONTENT (DATE STEPPER, FILTERS, SEARCH, LOGS SCROLL UP) =================
+        LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            for (option in sectorOptions) {
-                val isSelected = selectedSectorId == option.id
-                val chipColor = if (option.id != null) Color(option.colorLong) else TextPrimary
-                NeuPill(
-                    elevation = if (isSelected) 4.dp else 1.dp,
-                    borderColor = if (isSelected) chipColor.copy(alpha = 0.6f) else null,
-                    onClick = { viewModel.setSelectedSector(option.id) }
+            // Item 1: Multi-Day Stepper & Calendar Modal Trigger
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    NeuPill(
+                        onClick = { viewModel.stepDateOffset(-1) },
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        if (option.id != null) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .background(chipColor, CircleShape)
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("◀", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                    }
+
+                    NeuCard(
+                        onClick = { showCalendarDialog = true },
+                        modifier = Modifier.weight(1f),
+                        cornerRadius = 14.dp,
+                        elevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp, horizontal = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = dateDisplayLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (dateOffset == 0) EmeraldDark else TextPrimary
+                            )
+                            Text(
+                                text = "📅 Calendar",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted
                             )
                         }
-                        Text(
-                            text = option.name,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
-                            color = if (isSelected) chipColor else TextMuted
-                        )
+                    }
+
+                    val canStepForward = dateOffset < 0
+                    NeuPill(
+                        onClick = { if (canStepForward) viewModel.stepDateOffset(1) },
+                        modifier = Modifier.size(40.dp),
+                        backgroundColor = if (canStepForward) NeuBackground else NeuBackground.copy(alpha = 0.5f)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "▶",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (canStepForward) TextPrimary else TextMuted.copy(alpha = 0.3f)
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Active App Filter Banner (if redirected with a specific app)
-        if (selectedPackageFilter != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            // Item 2: Tier 1 Scope Bar (All Day vs Custom Window)
+            item {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "APP FILTER:",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Black,
-                        color = TextMuted,
-                        letterSpacing = 0.8.sp
-                    )
+                    val isAllDayActive = selectedSectorId == null && customTimeRange == null
                     NeuPill(
-                        elevation = 2.dp,
-                        borderColor = EmeraldDark.copy(alpha = 0.4f),
-                        onClick = {}
+                        elevation = if (isAllDayActive) 3.dp else 1.dp,
+                        borderColor = if (isAllDayActive) EmeraldDark.copy(alpha = 0.6f) else null,
+                        onClick = { viewModel.resetAllTimeFilters() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "All Day",
+                                fontSize = 11.sp,
+                                fontWeight = if (isAllDayActive) FontWeight.Black else FontWeight.Bold,
+                                color = if (isAllDayActive) EmeraldDark else TextMuted
+                            )
+                        }
+                    }
+
+                    val isCustomActive = customTimeRange != null
+                    NeuPill(
+                        elevation = if (isCustomActive) 3.dp else 1.dp,
+                        borderColor = if (isCustomActive) Color(0xFF8B5CF6).copy(alpha = 0.6f) else null,
+                        onClick = { showTimeRangeDialog = true },
+                        modifier = Modifier.weight(1.4f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp, horizontal = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isCustomActive) customTimeRangeFormatted ?: "Custom" else "Custom Window",
+                                fontSize = 11.sp,
+                                fontWeight = if (isCustomActive) FontWeight.Black else FontWeight.Bold,
+                                color = if (isCustomActive) Color(0xFF8B5CF6) else TextMuted,
+                                maxLines = 1
+                            )
+                            if (isCustomActive) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "×",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFFEF4444),
+                                    modifier = Modifier.clickable { viewModel.clearCustomTimeRange() }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Item 3: Tier 2 Sector Chips Bar + Edit Action
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (sector in sectors) {
+                        val isSelected = selectedSectorId == sector.id
+                        val chipColor = Color(sector.colorLong)
+                        NeuPill(
+                            elevation = if (isSelected) 3.dp else 1.dp,
+                            borderColor = if (isSelected) chipColor.copy(alpha = 0.8f) else null,
+                            onClick = {
+                                if (isSelected) {
+                                    viewModel.setSelectedSector(null)
+                                } else {
+                                    viewModel.setSelectedSector(sector.id)
+                                }
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(chipColor, CircleShape)
+                                )
+                                Text(
+                                    text = "${sector.name} (${formatSectorTime(sector)})",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+                                    color = if (isSelected) chipColor else TextMuted
+                                )
+                            }
+                        }
+                    }
+
+                    // Edit Sectors action pill
+                    NeuPill(
+                        onClick = { showSectorEditor = true },
+                        borderColor = EmeraldDark.copy(alpha = 0.3f)
                     ) {
                         Text(
-                            text = selectedAppName ?: selectedPackageFilter!!,
+                            text = "⚙ Edit Sectors (${sectors.size})",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = EmeraldDark,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
                         )
                     }
                 }
+            }
 
-                Text(
-                    text = "Clear Filter [×]",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFEF4444),
-                    modifier = Modifier
-                        .clickable { viewModel.clearPackageFilter() }
-                        .padding(vertical = 4.dp)
+            // Item 4: Active App Filter Banner (if redirected from Analytics)
+            if (selectedPackageFilter != null) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "APP FILTER:",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = TextMuted,
+                                letterSpacing = 0.8.sp
+                            )
+                            NeuPill(
+                                elevation = 2.dp,
+                                borderColor = EmeraldDark.copy(alpha = 0.4f),
+                                onClick = {}
+                            ) {
+                                Text(
+                                    text = selectedAppName ?: selectedPackageFilter!!,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = EmeraldDark,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Clear Filter [×]",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFEF4444),
+                            modifier = Modifier
+                                .clickable { viewModel.clearPackageFilter() }
+                                .padding(vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // Item 5: Search Input
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.setSearchQuery(it) },
+                    placeholder = { Text("Filter by app (e.g. YouTube)...", fontSize = 12.sp, color = TextMuted) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = EmeraldDark
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
 
-        // Search Input
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { viewModel.setSearchQuery(it) },
-            placeholder = { Text("Filter by app (e.g. YouTube)...", fontSize = 12.sp, color = TextMuted) },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = TextPrimary,
-                unfocusedTextColor = TextPrimary,
-                focusedBorderColor = EmeraldDark
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        // Session List
-        if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = EmeraldPrimary, strokeWidth = 2.dp)
-            }
-        } else if (filteredLogs.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = when {
-                        searchQuery.isNotBlank() -> "No sessions found matching \"$searchQuery\"."
-                        selectedSectorId != null -> "No sessions recorded in this sector."
-                        selectedPackageFilter != null -> "No sessions recorded for this app."
-                        else -> "No sessions recorded for this day."
-                    },
-                    fontSize = 12.sp,
-                    color = TextMuted,
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(filteredLogs.size, key = { filteredLogs[it].id }) { index ->
-                    val entry = filteredLogs[index]
-                    UsageLogCard(entry = entry, pm = pm)
+            // Item 6+: Session Entries or Empty State
+            if (isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = EmeraldPrimary, strokeWidth = 2.dp)
+                    }
+                }
+            } else if (filteredLogs.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = when {
+                                searchQuery.isNotBlank() -> "No sessions found matching \"$searchQuery\"."
+                                selectedSectorId != null -> "No sessions recorded in this sector."
+                                customTimeRange != null -> "No sessions recorded in this custom time window."
+                                selectedPackageFilter != null -> "No sessions recorded for this app."
+                                else -> "No sessions recorded for this day."
+                            },
+                            fontSize = 12.sp,
+                            color = TextMuted,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                items(filteredLogs, key = { it.id }) { entry ->
+                    UsageLogItem(entry = entry, pm = pm)
                 }
             }
         }
     }
+
+    // Dialogs
+    if (showCalendarDialog) {
+        LogbookCalendarDialog(
+            selectedDateOffset = dateOffset,
+            onDismiss = { showCalendarDialog = false },
+            onSelectDateOffset = { offset ->
+                viewModel.setDateOffset(offset)
+            }
+        )
+    }
+
+    if (showTimeRangeDialog) {
+        TimeRangePickerDialog(
+            onDismiss = { showTimeRangeDialog = false },
+            onConfirm = { sH, sM, eH, eM ->
+                viewModel.setCustomTimeRange(sH, sM, eH, eM)
+                showTimeRangeDialog = false
+            }
+        )
+    }
+
+    if (showSectorEditor) {
+        SectorEditorDialog(
+            initialSectors = sectors,
+            onDismiss = { showSectorEditor = false },
+            onSave = { updatedSectors ->
+                viewModel.saveConfiguredSectors(updatedSectors)
+                showSectorEditor = false
+            }
+        )
+    }
 }
 
 @Composable
-fun UsageLogCard(
+fun UsageLogItem(
     entry: UsageLogEntry,
     pm: PackageManager
 ) {

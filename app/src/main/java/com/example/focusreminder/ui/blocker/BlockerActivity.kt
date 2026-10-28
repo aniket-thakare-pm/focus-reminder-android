@@ -7,7 +7,11 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
+import androidx.lifecycle.lifecycleScope
+import com.example.focusreminder.platform.journal.JournalRepository
 import com.example.focusreminder.theme.FocusReminderTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class BlockerActivity : ComponentActivity() {
 
@@ -62,6 +66,17 @@ class BlockerActivity : ComponentActivity() {
                             // Record answers locally and grant temporary override in repository
                             val repo = com.example.focusreminder.platform.AppRestrictionRepository.getInstance(this@BlockerActivity)
                             repo.grantEmergencyOverride(appNameState, requestedMinutes)
+
+                            // Save reflection entry to persistent Journal SQLite database
+                            val journalRepo = JournalRepository.getInstance(this@BlockerActivity)
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                journalRepo.saveReflection(
+                                    packageName = appNameState,
+                                    appName = appNameState,
+                                    requestedMinutes = requestedMinutes,
+                                    answers = answers
+                                )
+                            }
 
                             val prefs = getSharedPreferences("emergency_override", Context.MODE_PRIVATE)
                             val expiryMs = System.currentTimeMillis() + (requestedMinutes * 60 * 1000L)

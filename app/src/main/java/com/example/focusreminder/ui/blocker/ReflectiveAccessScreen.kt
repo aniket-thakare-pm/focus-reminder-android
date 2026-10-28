@@ -35,7 +35,11 @@ fun ReflectiveAccessScreen(
     var requestedMinutes by remember { mutableIntStateOf(5) }
 
     val currentAnswer = answers.getOrElse(currentStep) { "" }
-    val isAnswerValid = currentAnswer.trim().length >= 8
+    val wordCount = remember(currentAnswer) {
+        val trimmed = currentAnswer.trim()
+        if (trimmed.isEmpty()) 0 else trimmed.split("\\s+".toRegex()).count { it.isNotBlank() }
+    }
+    val isAnswerValid = wordCount >= 10
 
     Box(
         modifier = Modifier
@@ -129,7 +133,30 @@ fun ReflectiveAccessScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isAnswerValid) "Requirement met ($wordCount words)" else "Minimum 10 words required ($wordCount/10)",
+                        fontSize = 11.sp,
+                        fontWeight = if (isAnswerValid) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isAnswerValid) EmeraldDark else Color(0xFFEF4444)
+                    )
+                    Text(
+                        text = if (isAnswerValid) "Unlocked" else "Locked",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAnswerValid) EmeraldDark else TextMuted
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // On final step: Ask user to set their needed access window duration
                 if (currentStep == 4) {
@@ -197,10 +224,12 @@ fun ReflectiveAccessScreen(
 
                 NeuPill(
                     onClick = {
-                        if (currentStep < 4) {
-                            currentStep += 1
-                        } else {
-                            onGrantOverride(answers.toList(), requestedMinutes)
+                        if (isAnswerValid) {
+                            if (currentStep < 4) {
+                                currentStep += 1
+                            } else {
+                                onGrantOverride(answers.toList(), requestedMinutes)
+                            }
                         }
                     },
                     backgroundColor = if (isAnswerValid) EmeraldPrimary else Color(0xFFD5DBE5),

@@ -42,6 +42,7 @@ import com.example.focusreminder.util.formatHoursMinutes
 fun AppSelectionScreen(
     initialTab: Int? = 0,
     onNavigateToAppAnalytics: (String) -> Unit = {},
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -51,10 +52,13 @@ fun AppSelectionScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var appsList by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
     var selectedAppForConfig by remember { mutableStateOf<InstalledAppInfo?>(null) }
 
     LaunchedEffect(updateKey) {
-        appsList = appManager.getLaunchableApps()
+        val loaded = appManager.getLaunchableAppsAsync()
+        appsList = loaded
+        isLoading = false
     }
 
     // Downloaded apps = user-installed applications (or currently restricted)
@@ -95,26 +99,49 @@ fun AppSelectionScreen(
         Spacer(modifier = Modifier.height(2.dp))
 
         // Header
-        Column {
-            Text(
-                text = "ATTENTION MANAGEMENT",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = EmeraldDark,
-                letterSpacing = 1.8.sp
-            )
-            Text(
-                text = "Application Limits",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Black,
-                color = TextPrimary
-            )
-            Text(
-                text = "Configure timers and rolling attention budgets for installed applications.",
-                fontSize = 12.sp,
-                color = TextSecondary,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (onOpenDrawer != null) {
+                NeuCard(
+                    onClick = onOpenDrawer,
+                    cornerRadius = 12.dp,
+                    elevation = 3.dp
+                ) {
+                    Box(
+                        modifier = Modifier.size(38.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        HamburgerVectorIcon(
+                            color = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+            Column {
+                Text(
+                    text = "ATTENTION MANAGEMENT",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = EmeraldDark,
+                    letterSpacing = 1.8.sp
+                )
+                Text(
+                    text = "Application Limits",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Configure timers and rolling attention budgets for installed applications.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
 
         // Sunken Inset Search Bar
@@ -227,8 +254,25 @@ fun AppSelectionScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 90.dp)
         ) {
+            if (isLoading && appsList.isEmpty()) {
+                item(key = "loading_indicator") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = EmeraldDark,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+            }
+
             // SECTION 1: ACTIVE APPS
-            if (selectedTab == null || selectedTab == 0) {
+            if (!isLoading && (selectedTab == null || selectedTab == 0)) {
                 item(key = "header_active_apps") {
                     Row(
                         modifier = Modifier
@@ -324,7 +368,7 @@ fun AppSelectionScreen(
             }
 
             // SECTION 2: ALL APPS ("All Apps would be the section title")
-            if (selectedTab == null || selectedTab == 1) {
+            if (!isLoading && (selectedTab == null || selectedTab == 1)) {
                 item(key = "header_all_apps") {
                     Row(
                         modifier = Modifier
