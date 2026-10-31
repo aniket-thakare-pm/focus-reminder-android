@@ -47,12 +47,24 @@ fun SquadScreen(
         isLoading = false
     }
 
+    // Realtime listener: auto-refreshes squad members when friends join or update
+    LaunchedEffect(squadInfo?.id) {
+        val currentId = squadRepo.activeSquadId
+        if (currentId != null) {
+            val syncService = com.example.focusreminder.platform.squad.FirebaseSquadSyncService.getInstance(context)
+            syncService.observeSquadMembers(currentId).collect {
+                squadInfo = squadRepo.getSquadInfo()
+            }
+        }
+    }
+
     if (showActionDialog) {
         SquadActionDialog(
             currentDisplayName = authManager.getDisplayName(),
             onDismiss = { showActionDialog = false },
-            onJoin = { code ->
+            onJoin = { code, displayName ->
                 coroutineScope.launch {
+                    authManager.setDisplayName(displayName)
                     val result = squadRepo.joinSquad(code)
                     result.onSuccess { info ->
                         squadInfo = info
@@ -64,14 +76,15 @@ fun SquadScreen(
                     }
                 }
             },
-            onCreate = { name, budget ->
+            onCreate = { name, budget, displayName ->
                 coroutineScope.launch {
+                    authManager.setDisplayName(displayName)
                     val result = squadRepo.createSquad(name, budget)
                     result.onSuccess { info ->
                         squadInfo = info
                         showActionDialog = false
                         com.example.focusreminder.platform.analytics.FirebaseAnalyticsHelper.logSquadCreated(1)
-                        Toast.makeText(context, "Squad created! Code: ${info.inviteCode}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Squad created! Room code: ${info.inviteCode}", Toast.LENGTH_LONG).show()
                     }.onFailure { err ->
                         Toast.makeText(context, err.message ?: "Failed to create squad", Toast.LENGTH_LONG).show()
                     }

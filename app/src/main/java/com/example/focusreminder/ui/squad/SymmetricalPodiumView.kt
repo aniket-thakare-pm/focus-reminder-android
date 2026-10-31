@@ -259,7 +259,37 @@ private fun HistogramPedestal(
     modifier: Modifier = Modifier
 ) {
     if (member == null) {
-        Box(modifier = modifier.height(pedestalHeight))
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Bottom
+        ) {
+            Text(
+                text = "Empty",
+                fontSize = 10.sp,
+                color = TextMuted.copy(alpha = 0.5f),
+                lineHeight = 13.sp
+            )
+            Text(
+                text = "Seat $rank",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextMuted.copy(alpha = 0.4f),
+                lineHeight = 12.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(pedestalHeight)
+                    .background(pillarFillColor.copy(alpha = 0.08f))
+                    .border(
+                        width = 1.dp,
+                        color = dividerColor.copy(alpha = 0.35f),
+                        shape = RectangleShape
+                    )
+            )
+        }
         return
     }
 

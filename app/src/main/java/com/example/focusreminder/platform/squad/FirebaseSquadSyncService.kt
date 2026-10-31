@@ -116,6 +116,17 @@ class FirebaseSquadSyncService private constructor(private val context: Context)
         }
     }
 
+    suspend fun getSquadMembers(squadId: String): Result<List<SquadMemberCloudDto>> {
+        val db = firestore ?: return Result.failure(IllegalStateException("Firebase is not configured yet."))
+        return try {
+            val snapshot = db.collection("squads").document(squadId).collection("members").get().await()
+            val list = snapshot.documents.mapNotNull { it.toObject(SquadMemberCloudDto::class.java) }
+            Result.success(list)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun observeSquadMembers(squadId: String): Flow<List<SquadMemberCloudDto>> = callbackFlow {
         val db = firestore
         if (db == null) {

@@ -32,21 +32,21 @@ enum class SquadDialogTab {
 fun SquadActionDialog(
     currentDisplayName: String,
     onDismiss: () -> Unit,
-    onJoin: (code: String) -> Unit,
-    onCreate: (name: String, budgetMinutes: Int) -> Unit,
+    onJoin: (code: String, displayName: String) -> Unit,
+    onCreate: (squadName: String, budgetMinutes: Int, displayName: String) -> Unit,
     onSaveProfile: (name: String) -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(SquadDialogTab.JOIN) }
+    var selectedTab by remember { mutableStateOf(SquadDialogTab.CREATE) }
     var joinCodeInput by remember { mutableStateOf("") }
-    var createNameInput by remember { mutableStateOf("") }
+    var createNameInput by remember { mutableStateOf("Focus Sprint") }
     var createBudgetInput by remember { mutableStateOf("60") }
-    var profileNameInput by remember { mutableStateOf(currentDisplayName) }
+    var profileNameInput by remember { mutableStateOf(if (currentDisplayName == "You") "" else currentDisplayName) }
 
     Dialog(onDismissRequest = onDismiss) {
         NeuCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 4.dp),
             cornerRadius = 24.dp,
             elevation = 6.dp
         ) {
@@ -54,64 +54,146 @@ fun SquadActionDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Header Tabs
+                // Header Title
+                Column {
+                    Text(
+                        text = "FOCUS SQUAD",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = EmeraldDark,
+                        letterSpacing = 1.5.sp
+                    )
+                    Text(
+                        text = when (selectedTab) {
+                            SquadDialogTab.JOIN -> "Join a Squad"
+                            SquadDialogTab.CREATE -> "Create New Squad"
+                            SquadDialogTab.PROFILE -> "My Identity"
+                        },
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Black,
+                        color = TextPrimary
+                    )
+                }
+
+                // Full-Width Segmented Tab Row (Equal 1f weights so nothing is crunched)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Column {
-                        Text(
-                            text = "FOCUS SQUAD",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = EmeraldDark,
-                            letterSpacing = 1.5.sp
-                        )
-                        Text(
-                            text = when (selectedTab) {
-                                SquadDialogTab.JOIN -> "Join with Room Code"
-                                SquadDialogTab.CREATE -> "Create 5-Person Squad"
-                                SquadDialogTab.PROFILE -> "My Squad Profile"
-                            },
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Black,
-                            color = TextPrimary
-                        )
-                    }
-
-                    // Tab selector pills
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TabPill(
-                            label = "Join",
-                            isSelected = selectedTab == SquadDialogTab.JOIN,
-                            onClick = { selectedTab = SquadDialogTab.JOIN }
-                        )
-                        TabPill(
-                            label = "Create",
-                            isSelected = selectedTab == SquadDialogTab.CREATE,
-                            onClick = { selectedTab = SquadDialogTab.CREATE }
-                        )
-                        TabPill(
-                            label = "Profile",
-                            isSelected = selectedTab == SquadDialogTab.PROFILE,
-                            onClick = { selectedTab = SquadDialogTab.PROFILE }
-                        )
-                    }
+                    TabPill(
+                        label = "Create",
+                        isSelected = selectedTab == SquadDialogTab.CREATE,
+                        modifier = Modifier.weight(1f),
+                        onClick = { selectedTab = SquadDialogTab.CREATE }
+                    )
+                    TabPill(
+                        label = "Join Code",
+                        isSelected = selectedTab == SquadDialogTab.JOIN,
+                        modifier = Modifier.weight(1f),
+                        onClick = { selectedTab = SquadDialogTab.JOIN }
+                    )
+                    TabPill(
+                        label = "Profile",
+                        isSelected = selectedTab == SquadDialogTab.PROFILE,
+                        modifier = Modifier.weight(1f),
+                        onClick = { selectedTab = SquadDialogTab.PROFILE }
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Tab Content Body
                 when (selectedTab) {
+                    SquadDialogTab.CREATE -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                text = "Your Display Name:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted
+                            )
+                            NeumorphicInput(
+                                value = profileNameInput,
+                                onValueChange = { profileNameInput = it },
+                                placeholder = "e.g. Aatharv"
+                            )
+
+                            Text(
+                                text = "Squad / Room Name:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted
+                            )
+                            NeumorphicInput(
+                                value = createNameInput,
+                                onValueChange = { createNameInput = it },
+                                placeholder = "e.g. Study Sprint"
+                            )
+
+                            Text(
+                                text = "Daily Target Budget (Minutes):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted
+                            )
+                            NeumorphicInput(
+                                value = createBudgetInput,
+                                onValueChange = { createBudgetInput = it.filter { ch -> ch.isDigit() } },
+                                placeholder = "60"
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            NeuPill(
+                                onClick = {
+                                    val finalName = profileNameInput.trim().ifEmpty { "Aatharv" }
+                                    val squad = createNameInput.trim().ifEmpty { "Focus Squad" }
+                                    val budget = createBudgetInput.toIntOrNull() ?: 60
+                                    onCreate(squad, budget, finalName)
+                                },
+                                cornerRadius = 14.dp,
+                                elevation = 4.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Create Squad & Get Code",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = EmeraldDark
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     SquadDialogTab.JOIN -> {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
-                                text = "Enter the 6-character room code shared by your friend:",
-                                fontSize = 12.sp,
+                                text = "Your Display Name:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = TextMuted
                             )
+                            NeumorphicInput(
+                                value = profileNameInput,
+                                onValueChange = { profileNameInput = it },
+                                placeholder = "e.g. Aatharv"
+                            )
 
+                            Text(
+                                text = "Enter 6-Character Room Code:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted
+                            )
                             NeumorphicInput(
                                 value = joinCodeInput.uppercase(),
                                 onValueChange = { if (it.length <= 6) joinCodeInput = it.uppercase() },
@@ -124,11 +206,12 @@ fun SquadActionDialog(
                             NeuPill(
                                 onClick = {
                                     if (joinCodeInput.trim().length >= 4) {
-                                        onJoin(joinCodeInput.trim().uppercase())
+                                        val finalName = profileNameInput.trim().ifEmpty { "Aatharv" }
+                                        onJoin(joinCodeInput.trim().uppercase(), finalName)
                                     }
                                 },
                                 cornerRadius = 14.dp,
-                                elevation = 3.dp,
+                                elevation = 4.dp,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Box(
@@ -138,64 +221,7 @@ fun SquadActionDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "Join Squad",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = EmeraldDark
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    SquadDialogTab.CREATE -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(
-                                text = "Squad Name:",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextMuted
-                            )
-
-                            NeumorphicInput(
-                                value = createNameInput,
-                                onValueChange = { createNameInput = it },
-                                placeholder = "e.g. Sprint Pact"
-                            )
-
-                            Text(
-                                text = "Your Daily Target Budget (Minutes):",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextMuted
-                            )
-
-                            NeumorphicInput(
-                                value = createBudgetInput,
-                                onValueChange = { createBudgetInput = it.filter { ch -> ch.isDigit() } },
-                                placeholder = "60"
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            NeuPill(
-                                onClick = {
-                                    val name = createNameInput.trim().ifEmpty { "Focus Squad" }
-                                    val budget = createBudgetInput.toIntOrNull() ?: 60
-                                    onCreate(name, budget)
-                                },
-                                cornerRadius = 14.dp,
-                                elevation = 3.dp,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "Generate Room Code",
+                                        text = "Join Squad Room",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Black,
                                         color = EmeraldDark
@@ -208,7 +234,7 @@ fun SquadActionDialog(
                     SquadDialogTab.PROFILE -> {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
-                                text = "Your Display Name:",
+                                text = "Your Display Name (Visible to Squad):",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextMuted
@@ -239,7 +265,7 @@ fun SquadActionDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "Save Profile",
+                                        text = "Save Profile Name",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Black,
                                         color = EmeraldDark
@@ -248,22 +274,6 @@ fun SquadActionDialog(
                             }
                         }
                     }
-                }
-
-                // Close Cancel button
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onDismiss() }
-                        .padding(top = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Cancel",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted
-                    )
                 }
             }
         }
@@ -274,27 +284,30 @@ fun SquadActionDialog(
 private fun TabPill(
     label: String,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .background(
-                color = if (isSelected) EmeraldDark.copy(alpha = 0.15f) else NeuSurfaceSunken,
-                shape = RoundedCornerShape(8.dp)
+                color = if (isSelected) EmeraldDark.copy(alpha = 0.16f) else NeuSurfaceSunken,
+                shape = RoundedCornerShape(10.dp)
             )
             .border(
                 width = 1.dp,
-                color = if (isSelected) EmeraldDark.copy(alpha = 0.4f) else NeuSunkenTrack,
-                shape = RoundedCornerShape(8.dp)
+                color = if (isSelected) EmeraldDark.copy(alpha = 0.5f) else NeuSunkenTrack,
+                shape = RoundedCornerShape(10.dp)
             )
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = if (isSelected) EmeraldDark else TextMuted
+            color = if (isSelected) EmeraldDark else TextMuted,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -309,7 +322,7 @@ private fun NeumorphicInput(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(46.dp)
             .background(NeuSurfaceSunken, RoundedCornerShape(12.dp))
             .border(1.dp, NeuSunkenTrack, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp),

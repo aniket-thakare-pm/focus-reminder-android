@@ -104,86 +104,43 @@ class SquadRepository private constructor(private val context: Context) {
             cloudSync.syncMemberMetrics(currentSquadId, cloudDto)
         }
 
-        // Return members (offline mock slots or active squad)
-        val peer1 = SquadMember(
-            id = "peer_1",
-            displayName = "Sarah",
-            avatarInitials = "SK",
-            isCurrentUser = false,
-            totalScreenMinutes = 195,
-            monitoredMinutes = 18,
-            yesterdayMonitoredMinutes = 62,
-            weeklyAvgMonitoredMinutes = 55,
-            weeklyTotalMinutes = 1180,
-            weeklyMonitoredMinutes = 240,
-            dailyBudgetMinutes = 45,
-            streakDays = 8,
-            isWithinBudget = true,
-            past7DaysGoalMet = listOf(true, true, true, true, true, true, true),
-            rankMovement = 2
-        )
+        val realCloudMembers = if (cloudSync.isConfigured() && currentSquadId != null) {
+            cloudSync.getSquadMembers(currentSquadId).getOrNull()
+        } else null
 
-        val peer2 = SquadMember(
-            id = "peer_2",
-            displayName = "David",
-            avatarInitials = "DW",
-            isCurrentUser = false,
-            totalScreenMinutes = 230,
-            monitoredMinutes = 35,
-            yesterdayMonitoredMinutes = 55,
-            weeklyAvgMonitoredMinutes = 60,
-            weeklyTotalMinutes = 1420,
-            weeklyMonitoredMinutes = 380,
-            dailyBudgetMinutes = 60,
-            streakDays = 3,
-            isWithinBudget = true,
-            past7DaysGoalMet = listOf(false, false, false, false, true, true, true),
-            rankMovement = 0
-        )
-
-        val peer3 = SquadMember(
-            id = "peer_3",
-            displayName = "Elena",
-            avatarInitials = "ER",
-            isCurrentUser = false,
-            totalScreenMinutes = 140,
-            monitoredMinutes = 48,
-            yesterdayMonitoredMinutes = 40,
-            weeklyAvgMonitoredMinutes = 50,
-            weeklyTotalMinutes = 950,
-            weeklyMonitoredMinutes = 310,
-            dailyBudgetMinutes = 60,
-            streakDays = 7,
-            isWithinBudget = true,
-            past7DaysGoalMet = listOf(true, true, true, true, true, true, true),
-            rankMovement = -1
-        )
-
-        val peer4 = SquadMember(
-            id = "peer_4",
-            displayName = "Marcus",
-            avatarInitials = "ML",
-            isCurrentUser = false,
-            totalScreenMinutes = 260,
-            monitoredMinutes = 85,
-            yesterdayMonitoredMinutes = 68,
-            weeklyAvgMonitoredMinutes = 75,
-            weeklyTotalMinutes = 1680,
-            weeklyMonitoredMinutes = 520,
-            dailyBudgetMinutes = 90,
-            streakDays = 23,
-            isWithinBudget = true,
-            past7DaysGoalMet = listOf(true, true, true, true, true, true, true),
-            rankMovement = -2
-        )
-
-        val members = listOf(currentUser, peer1, peer2, peer3, peer4)
+        val finalMemberList: List<SquadMember> = if (realCloudMembers != null && realCloudMembers.isNotEmpty()) {
+            realCloudMembers.map { dto ->
+                if (dto.userId == currentUserId) {
+                    currentUser
+                } else {
+                    SquadMember(
+                        id = dto.userId,
+                        displayName = dto.displayName,
+                        avatarInitials = dto.avatarInitials,
+                        isCurrentUser = false,
+                        totalScreenMinutes = dto.totalScreenMinutes,
+                        monitoredMinutes = dto.monitoredMinutes,
+                        yesterdayMonitoredMinutes = dto.yesterdayMonitoredMinutes,
+                        weeklyAvgMonitoredMinutes = dto.weeklyAvgMonitoredMinutes,
+                        weeklyTotalMinutes = dto.weeklyTotalMinutes,
+                        weeklyMonitoredMinutes = dto.weeklyMonitoredMinutes,
+                        dailyBudgetMinutes = dto.dailyBudgetMinutes,
+                        streakDays = dto.streakDays,
+                        isWithinBudget = dto.isWithinBudget,
+                        past7DaysGoalMet = dto.past7DaysGoalMet,
+                        rankMovement = dto.rankMovement
+                    )
+                }
+            }
+        } else {
+            listOf(currentUser)
+        }
 
         SquadInfo(
-            id = currentSquadId ?: "squad_sprint_pact",
-            name = activeSquadName ?: "Sprint Pact",
-            inviteCode = activeInviteCode ?: "PACT5",
-            members = members
+            id = currentSquadId ?: "local_squad",
+            name = activeSquadName ?: "My Focus Squad",
+            inviteCode = activeInviteCode ?: "CREATE",
+            members = finalMemberList
         )
     }
 
