@@ -99,6 +99,22 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         loadData()
     }
 
+    fun isPackageExcluded(packageName: String): Boolean {
+        val restrictionRepo = com.example.focusreminder.platform.AppRestrictionRepository.getInstance(getApplication())
+        return restrictionRepo.isExcludedFromAnalytics(packageName)
+    }
+
+    fun toggleExcludePackage(packageName: String) {
+        val restrictionRepo = com.example.focusreminder.platform.AppRestrictionRepository.getInstance(getApplication())
+        val currentlyExcluded = restrictionRepo.isExcludedFromAnalytics(packageName)
+        restrictionRepo.setExcludedFromAnalytics(packageName, !currentlyExcluded)
+        if (!currentlyExcluded) {
+            clearScope()
+        } else {
+            loadData()
+        }
+    }
+
     fun loadData() {
         viewModelScope.launch {
             _isLoading.value = true

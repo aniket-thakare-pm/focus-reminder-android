@@ -243,7 +243,24 @@ fun AnalyticsScreen(
             }
 
             if (isScoped) {
-                Spacer(modifier = Modifier.width(8.dp))
+                selectedPackage?.let { pkg ->
+                    val isExcluded = viewModel.isPackageExcluded(pkg)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    NeuPill(
+                        onClick = { viewModel.toggleExcludePackage(pkg) },
+                        cornerRadius = 10.dp,
+                        elevation = 2.dp
+                    ) {
+                        Text(
+                            text = if (isExcluded) "Include" else "Exclude App",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isExcluded) EmeraldDark else WarningAmber,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(6.dp))
                 NeuCircleButton(onClick = { viewModel.clearScope() }) {
                     Text("✕", fontSize = 11.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                 }

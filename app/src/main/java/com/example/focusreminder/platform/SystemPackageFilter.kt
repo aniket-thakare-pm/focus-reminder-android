@@ -19,6 +19,7 @@ object SystemPackageFilter {
     fun isIgnoredOrSystem(context: Context, pkg: String): Boolean {
         if (pkg == context.packageName) return true
         if (isKnownSystemOrUpdater(pkg)) return true
+        if (AppRestrictionRepository.getInstance(context).isExcludedFromAnalytics(pkg)) return true
 
         return !isLaunchableCache.getOrPut(pkg) {
             try {

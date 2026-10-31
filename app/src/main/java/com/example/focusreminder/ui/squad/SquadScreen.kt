@@ -18,11 +18,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusreminder.domain.model.SquadInfo
+import com.example.focusreminder.platform.auth.AuthManager
 import com.example.focusreminder.platform.squad.SquadRepository
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.BackArrowVectorIcon
 import com.example.focusreminder.ui.components.NeuCard
 import com.example.focusreminder.ui.components.NeuPill
+import kotlinx.coroutines.launch
 
 @Composable
 fun SquadScreen(
@@ -32,14 +34,58 @@ fun SquadScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val squadRepo = remember { SquadRepository.getInstance(context) }
+    val authManager = remember { AuthManager.getInstance(context) }
+    val coroutineScope = rememberCoroutineScope()
 
     var squadInfo by remember { mutableStateOf<SquadInfo?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var showActionDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val data = squadRepo.getSquadInfo()
         squadInfo = data
         isLoading = false
+    }
+
+    if (showActionDialog) {
+        SquadActionDialog(
+            currentDisplayName = authManager.getDisplayName(),
+            onDismiss = { showActionDialog = false },
+            onJoin = { code ->
+                coroutineScope.launch {
+                    val result = squadRepo.joinSquad(code)
+                    result.onSuccess { info ->
+                        squadInfo = info
+                        showActionDialog = false
+                        com.example.focusreminder.platform.analytics.FirebaseAnalyticsHelper.logSquadJoined()
+                        Toast.makeText(context, "Joined squad ${info.name}!", Toast.LENGTH_SHORT).show()
+                    }.onFailure { err ->
+                        Toast.makeText(context, err.message ?: "Failed to join squad", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            onCreate = { name, budget ->
+                coroutineScope.launch {
+                    val result = squadRepo.createSquad(name, budget)
+                    result.onSuccess { info ->
+                        squadInfo = info
+                        showActionDialog = false
+                        com.example.focusreminder.platform.analytics.FirebaseAnalyticsHelper.logSquadCreated(1)
+                        Toast.makeText(context, "Squad created! Code: ${info.inviteCode}", Toast.LENGTH_LONG).show()
+                    }.onFailure { err ->
+                        Toast.makeText(context, err.message ?: "Failed to create squad", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            onSaveProfile = { name ->
+                authManager.setDisplayName(name)
+                coroutineScope.launch {
+                    squadInfo = squadRepo.getSquadInfo()
+                    showActionDialog = false
+                    Toast.makeText(context, "Display name updated to $name", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 
     Column(
@@ -133,9 +179,7 @@ fun SquadScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 NeuPill(
-                    onClick = {
-                        Toast.makeText(context, "Multiple squad switcher ready for cloud phase", Toast.LENGTH_SHORT).show()
-                    },
+                    onClick = { showActionDialog = true },
                     cornerRadius = 12.dp,
                     elevation = 2.dp
                 ) {
@@ -182,7 +226,7 @@ fun SquadScreen(
                     SquadPactHalo(members = squad.members)
                 }
 
-                // 2. Symmetrical Mountain Podium [4, 2, 1, 3, 5]
+                // 2. Symmetrical Mountain Podium [4, 2, 1, 3, 5] & Baseline Overlap
                 item(key = "squad_podium") {
                     SymmetricalPodiumView(members = squad.members)
                 }
@@ -192,9 +236,9 @@ fun SquadScreen(
                     DistractedVsTotalChart(members = squad.members)
                 }
 
-                // 4. Yesterday vs. Today Overlap Bar Chart
-                item(key = "overlap_chart") {
-                    YesterdayVsTodayOverlapChart(members = squad.members)
+                // 4. 7-Day Consistency Pulse & Personal Goal Defense
+                item(key = "squad_consistency_pulse") {
+                    SquadConsistencyPulseChart(members = squad.members)
                 }
 
                 // 5. Architecture Footnote

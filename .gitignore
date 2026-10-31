@@ -12,4 +12,5 @@ app/build/
 local.properties
 *.apk
 /releases/
+app/google-services.json
 

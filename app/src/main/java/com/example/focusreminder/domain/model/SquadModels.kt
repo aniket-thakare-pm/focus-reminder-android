@@ -11,15 +11,29 @@ data class SquadMember(
     val totalScreenMinutes: Int,
     val monitoredMinutes: Int,
     val yesterdayMonitoredMinutes: Int,
+    val weeklyAvgMonitoredMinutes: Int = yesterdayMonitoredMinutes,
+    val weeklyTotalMinutes: Int = totalScreenMinutes * 6,
+    val weeklyMonitoredMinutes: Int = monitoredMinutes * 6,
+    val dailyBudgetMinutes: Int = 60,
     val streakDays: Int = 1,
     val isWithinBudget: Boolean = true,
+    val past7DaysGoalMet: List<Boolean> = listOf(true, true, true, true, true, true, true),
     val rankMovement: Int = 0 // > 0 moved up, < 0 moved down, 0 steady
 ) {
     /**
      * Self-Improvement Delta in minutes.
-     * Positive = improved (reduced distraction vs yesterday).
-     * Negative = increased distraction vs yesterday.
+     * Positive = improved (reduced distraction vs baseline).
+     * Negative = increased distraction vs baseline.
      */
+    fun getDeltaMinutes(isWeeklyAvg: Boolean): Int {
+        val baseline = if (isWeeklyAvg) weeklyAvgMonitoredMinutes else yesterdayMonitoredMinutes
+        return baseline - monitoredMinutes
+    }
+
+    fun getBaselineMinutes(isWeeklyAvg: Boolean): Int {
+        return if (isWeeklyAvg) weeklyAvgMonitoredMinutes else yesterdayMonitoredMinutes
+    }
+
     val deltaMinutes: Int
         get() = yesterdayMonitoredMinutes - monitoredMinutes
 

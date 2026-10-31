@@ -19,7 +19,7 @@ data class MonitoredAppConfig(
     val emergencyOverrideExpiryMs: Long = 0L
 )
 
-class AppRestrictionRepository(context: Context) {
+class AppRestrictionRepository(private val context: Context) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("app_restrictions_prefs", Context.MODE_PRIVATE)
@@ -29,6 +29,7 @@ class AppRestrictionRepository(context: Context) {
 
     companion object {
         private const val KEY_RESTRICTED_PACKAGES = "restricted_packages"
+        private const val KEY_EXCLUDED_ANALYTICS_PACKAGES = "excluded_analytics_packages"
         private const val PREFIX_ROLLING = "rolling_min_"
         private const val PREFIX_COOLDOWN = "cooldown_min_"
         private const val PREFIX_DAILY = "daily_min_"
@@ -58,6 +59,38 @@ class AppRestrictionRepository(context: Context) {
      */
     fun isRestricted(packageName: String): Boolean {
         return getRestrictedPackages().contains(packageName)
+    }
+
+    /**
+     * Set of package names specifically excluded from daily analytics, screen time, and squad metrics.
+     */
+    fun getExcludedAnalyticsPackages(): Set<String> {
+        return prefs.getStringSet(KEY_EXCLUDED_ANALYTICS_PACKAGES, emptySet()) ?: emptySet()
+    }
+
+    /**
+     * Checks if a package is excluded from analytics.
+     */
+    fun isExcludedFromAnalytics(packageName: String): Boolean {
+        return getExcludedAnalyticsPackages().contains(packageName)
+    }
+
+    /**
+     * Exclude or include an application in daily analytics and screen time.
+     * When excluded, purges all stored sessions for that package immediately.
+     */
+    fun setExcludedFromAnalytics(packageName: String, excluded: Boolean) {
+        val current = getExcludedAnalyticsPackages().toMutableSet()
+        if (excluded) {
+            current.add(packageName)
+            // Instantly wipe existing session history so historical hours vanish immediately
+            com.example.focusreminder.data.analytics.SessionDatabaseHelper.getInstance(context)
+                .deleteSessionsForPackage(packageName)
+        } else {
+            current.remove(packageName)
+        }
+        prefs.edit().putStringSet(KEY_EXCLUDED_ANALYTICS_PACKAGES, current).apply()
+        notifyChange()
     }
 
     /**

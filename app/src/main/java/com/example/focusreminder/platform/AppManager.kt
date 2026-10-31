@@ -17,6 +17,7 @@ data class InstalledAppInfo(
     val appName: String,
     val icon: Drawable? = null,
     val isRestricted: Boolean = false,
+    val isExcludedFromAnalytics: Boolean = false,
     val rollingBudgetMinutes: Int = 15,
     val cooldownMinutes: Int = 30,
     val dailyLimitMinutes: Int = 90,
@@ -57,6 +58,7 @@ class AppManager(private val context: Context) {
                 val pkg = app.packageName
                 app.copy(
                     isRestricted = repo.isRestricted(pkg),
+                    isExcludedFromAnalytics = repo.isExcludedFromAnalytics(pkg),
                     rollingBudgetMinutes = repo.getRollingBudgetMinutes(pkg),
                     cooldownMinutes = repo.getCooldownMinutes(pkg),
                     dailyLimitMinutes = repo.getDailyLimitMinutes(pkg),
@@ -92,6 +94,7 @@ class AppManager(private val context: Context) {
             val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
 
             val isRestricted = repo.isRestricted(pkg)
+            val isExcluded = repo.isExcludedFromAnalytics(pkg)
             val rolling = repo.getRollingBudgetMinutes(pkg)
             val cooldown = repo.getCooldownMinutes(pkg)
             val daily = repo.getDailyLimitMinutes(pkg)
@@ -104,6 +107,7 @@ class AppManager(private val context: Context) {
                     appName = label,
                     icon = icon,
                     isRestricted = isRestricted,
+                    isExcludedFromAnalytics = isExcluded,
                     rollingBudgetMinutes = rolling,
                     cooldownMinutes = cooldown,
                     dailyLimitMinutes = daily,
@@ -132,6 +136,7 @@ class AppManager(private val context: Context) {
                         appName = label,
                         icon = icon,
                         isRestricted = true,
+                        isExcludedFromAnalytics = repo.isExcludedFromAnalytics(pkg),
                         rollingBudgetMinutes = repo.getRollingBudgetMinutes(pkg),
                         cooldownMinutes = repo.getCooldownMinutes(pkg),
                         dailyLimitMinutes = repo.getDailyLimitMinutes(pkg),

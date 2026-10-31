@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -16,21 +16,37 @@ import androidx.compose.ui.unit.sp
 import com.example.focusreminder.domain.model.SquadMember
 import com.example.focusreminder.theme.*
 import com.example.focusreminder.ui.components.NeuCard
+import com.example.focusreminder.ui.components.NeuPill
 import com.example.focusreminder.util.formatHoursMinutes
 
 /**
  * Infographic 3: 5-Friend Distracted vs. Total Time Horizon Chart.
  * Ranked strictly by monitored distraction time (least distraction at the top).
- * Displays full Total Screen Time with the Distraction segment visually contrasted.
+ *
+ * Interactions:
+ * 1. Top-Right Pill Tap: Toggles between "Today" and "This Week".
+ * 2. Daily Streaks: Displayed inline on every member row.
  */
 @Composable
 fun DistractedVsTotalChart(
     members: List<SquadMember>,
     modifier: Modifier = Modifier
 ) {
+    var isWeekly by remember { mutableStateOf(false) }
+
     // Ranked by monitored distraction minutes ascending (least distraction = #1)
-    val ranked = members.sortedBy { it.monitoredMinutes }
-    val maxTotalTime = (ranked.maxOfOrNull { it.totalScreenMinutes } ?: 1).coerceAtLeast(60)
+    val ranked = remember(members, isWeekly) {
+        members.sortedBy { if (isWeekly) it.weeklyMonitoredMinutes else it.monitoredMinutes }
+    }
+
+    val maxTotalTime = remember(ranked, isWeekly) {
+        val maxVal = if (isWeekly) {
+            ranked.maxOfOrNull { it.weeklyTotalMinutes } ?: 1
+        } else {
+            ranked.maxOfOrNull { it.totalScreenMinutes } ?: 1
+        }
+        maxVal.coerceAtLeast(60)
+    }
 
     NeuCard(
         modifier = modifier.fillMaxWidth(),
@@ -43,35 +59,62 @@ fun DistractedVsTotalChart(
                 .padding(vertical = 16.dp, horizontal = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column {
-                Text(
-                    text = "DISTRACTION CONTROL",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = EmeraldDark,
-                    letterSpacing = 1.6.sp
-                )
-                Text(
-                    text = "Distracted vs. Total Screen Time",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Ranked by lowest monitored time. Clean utility time is shown in slate.",
-                    fontSize = 11.sp,
-                    color = TextMuted,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "DISTRACTION CONTROL",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = EmeraldDark,
+                        letterSpacing = 1.6.sp
+                    )
+                    Text(
+                        text = if (isWeekly) "Weekly Distracted vs. Total" else "Daily Distracted vs. Total",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Ranked by lowest monitored time. Clean utility in slate.",
+                        fontSize = 11.sp,
+                        color = TextMuted,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+
+                // Single-Tap Toggle Pill: Today <-> This Week
+                NeuPill(
+                    onClick = { isWeekly = !isWeekly },
+                    cornerRadius = 10.dp,
+                    elevation = 2.dp
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isWeekly) "This Week" else "Today",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.Monospace,
+                            color = EmeraldDark
+                        )
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             ranked.forEachIndexed { index, member ->
                 DistractedVsTotalRow(
                     rank = index + 1,
                     member = member,
-                    maxTotalTime = maxTotalTime
+                    maxTotalTime = maxTotalTime,
+                    isWeekly = isWeekly
                 )
             }
         }
@@ -82,18 +125,25 @@ fun DistractedVsTotalChart(
 private fun DistractedVsTotalRow(
     rank: Int,
     member: SquadMember,
-    maxTotalTime: Int
+    maxTotalTime: Int,
+    isWeekly: Boolean
 ) {
-    val totalRatio = (member.totalScreenMinutes.toFloat() / maxTotalTime.toFloat()).coerceIn(0.15f, 1.0f)
-    val distractedRatio = if (member.totalScreenMinutes > 0) {
-        (member.monitoredMinutes.toFloat() / member.totalScreenMinutes.toFloat()).coerceIn(0.05f, 1.0f)
+    val totalMin = if (isWeekly) member.weeklyTotalMinutes else member.totalScreenMinutes
+    val monitoredMin = if (isWeekly) member.weeklyMonitoredMinutes else member.monitoredMinutes
+
+    val totalRatio = (totalMin.toFloat() / maxTotalTime.toFloat()).coerceIn(0.15f, 1.0f)
+    val distractedRatio = if (totalMin > 0) {
+        (monitoredMin.toFloat() / totalMin.toFloat()).coerceIn(0.05f, 1.0f)
     } else {
         0.05f
     }
 
+    val distractionThresholdLow = if (isWeekly) 180 else 30
+    val distractionThresholdMid = if (isWeekly) 360 else 60
+
     val distractionColor = when {
-        member.monitoredMinutes <= 30 -> EmeraldDark
-        member.monitoredMinutes <= 60 -> Color(0xFFD97706)
+        monitoredMin <= distractionThresholdLow -> EmeraldDark
+        monitoredMin <= distractionThresholdMid -> Color(0xFFD97706)
         else -> Color(0xFFEF4444)
     }
 
@@ -108,7 +158,7 @@ private fun DistractedVsTotalRow(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = "#$rank",
@@ -132,7 +182,7 @@ private fun DistractedVsTotalRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Distracted: ${formatHoursMinutes(member.monitoredMinutes)}",
+                    text = "Distracted: ${formatHoursMinutes(monitoredMin)}",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
                     color = distractionColor
@@ -143,7 +193,7 @@ private fun DistractedVsTotalRow(
                     color = TextMuted
                 )
                 Text(
-                    text = "Total: ${formatHoursMinutes(member.totalScreenMinutes)}",
+                    text = "Total: ${formatHoursMinutes(totalMin)}",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     color = TextMuted

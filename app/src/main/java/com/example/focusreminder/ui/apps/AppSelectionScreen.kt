@@ -424,8 +424,9 @@ fun AppSelectionScreen(
         BudgetConfigDialog(
             app = app,
             onDismiss = { selectedAppForConfig = null },
-            onSave = { sessionMinutes, cooldownMinutes, dailyLimit ->
+            onSave = { sessionMinutes, cooldownMinutes, dailyLimit, isExcluded ->
                 repo.setLimits(app.packageName, sessionMinutes, cooldownMinutes, dailyLimit)
+                repo.setExcludedFromAnalytics(app.packageName, isExcluded)
                 selectedAppForConfig = null
             }
         )
@@ -513,6 +514,17 @@ fun ActiveAppRowItem(
                                         fontSize = 8.sp,
                                         fontWeight = FontWeight.Black,
                                         color = ErrorRed,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            if (app.isExcludedFromAnalytics) {
+                                NeuInsetWell(cornerRadius = 6.dp) {
+                                    Text(
+                                        text = "EXCLUDED",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = WarningAmber,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
@@ -662,12 +674,28 @@ fun AllAppRowItem(
                 }
 
                 Column(modifier = Modifier.padding(end = 8.dp)) {
-                    Text(
-                        text = app.appName,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = app.appName,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        if (app.isExcludedFromAnalytics) {
+                            NeuInsetWell(cornerRadius = 6.dp) {
+                                Text(
+                                    text = "EXCLUDED",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = WarningAmber,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     if (app.isRestricted) {
                         val dailyStr = formatHoursMinutes(app.dailyLimitMinutes)
@@ -677,6 +705,13 @@ fun AllAppRowItem(
                             color = EmeraldDark,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.SemiBold
+                        )
+                    } else if (app.isExcludedFromAnalytics) {
+                        Text(
+                            text = "Ignored in Screen Time & Stats",
+                            fontSize = 10.sp,
+                            color = WarningAmber,
+                            fontWeight = FontWeight.Medium
                         )
                     } else {
                         Text(
@@ -707,18 +742,19 @@ fun AllAppRowItem(
 fun BudgetConfigDialog(
     app: InstalledAppInfo,
     onDismiss: () -> Unit,
-    onSave: (sessionMinutes: Int, cooldownMinutes: Int, dailyMinutes: Int) -> Unit
+    onSave: (sessionMinutes: Int, cooldownMinutes: Int, dailyMinutes: Int, isExcluded: Boolean) -> Unit
 ) {
     var sessionBudget by remember { mutableFloatStateOf(app.rollingBudgetMinutes.toFloat().coerceIn(5f, 60f)) }
     var cooldownMinutes by remember { mutableFloatStateOf(app.cooldownMinutes.toFloat().coerceIn(15f, 120f)) }
     var dailyLimit by remember { mutableFloatStateOf(app.dailyLimitMinutes.toFloat().coerceIn(30f, 360f)) }
+    var isExcludedFromAnalytics by remember { mutableStateOf(app.isExcludedFromAnalytics) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = NeuSurface,
         title = {
             Text(
-                text = "Budget: ${app.appName}",
+                text = "Configure: ${app.appName}",
                 color = TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Black
@@ -839,13 +875,58 @@ fun BudgetConfigDialog(
                     )
                 }
 
+                // Rule 4: Analytics & Screen Time Exclusion Toggle
+                NeuInsetWell(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 12.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isExcludedFromAnalytics = !isExcludedFromAnalytics }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Exclude from Screen Time",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (isExcludedFromAnalytics) WarningAmber else TextPrimary
+                            )
+                            Text(
+                                text = "Ignores foreground time in daily analytics and squad comparisons (ideal for study timers, ambient clocks, white noise).",
+                                fontSize = 10.sp,
+                                color = TextMuted,
+                                lineHeight = 13.sp
+                            )
+                        }
+
+                        Switch(
+                            checked = isExcludedFromAnalytics,
+                            onCheckedChange = { isExcludedFromAnalytics = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = WarningAmber,
+                                uncheckedThumbColor = TextMuted,
+                                uncheckedTrackColor = NeuSunkenTrack
+                            )
+                        )
+                    }
+                }
+
                 // Summary Note
                 NeuInsetWell(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 10.dp
                 ) {
                     Text(
-                        text = "Use for up to ${sessionBudget.toInt()}m, then locked for ${cooldownMinutes.toInt()}m. Full-screen entry contract and live chronometer timer will be active.",
+                        text = if (isExcludedFromAnalytics) {
+                            "This app will NOT count toward digital screen time or logs."
+                        } else {
+                            "Use for up to ${sessionBudget.toInt()}m, then locked for ${cooldownMinutes.toInt()}m. Full-screen entry contract and live chronometer timer will be active."
+                        },
                         fontSize = 11.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(10.dp),
@@ -855,7 +936,7 @@ fun BudgetConfigDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(sessionBudget.toInt(), cooldownMinutes.toInt(), dailyLimit.toInt()) }) {
+            TextButton(onClick = { onSave(sessionBudget.toInt(), cooldownMinutes.toInt(), dailyLimit.toInt(), isExcludedFromAnalytics) }) {
                 Text("Save Changes", color = EmeraldDark, fontWeight = FontWeight.Black)
             }
         },

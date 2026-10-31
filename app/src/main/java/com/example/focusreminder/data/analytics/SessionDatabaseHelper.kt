@@ -69,6 +69,19 @@ class SessionDatabaseHelper private constructor(context: Context) :
     }
 
     /**
+     * Purges all recorded sessions for a specific package name.
+     * Used when an app is excluded from analytics (e.g. background timer or ambient tools).
+     */
+    fun deleteSessionsForPackage(packageName: String): Int {
+        val db = writableDatabase
+        return db.delete(
+            TABLE_SESSIONS,
+            "$COL_PACKAGE_NAME = ?",
+            arrayOf(packageName)
+        )
+    }
+
+    /**
      * Atomically replaces all sessions in [startTimeMs, endTimeMs] with [sessions].
      * Guarantees zero duplicate accumulation and complete idempotency across sync cycles.
      */
