@@ -147,17 +147,21 @@ object AppUpdateManager {
 
             val totalBytes = conn.contentLength.toLong().let { if (it > 0) it else updateInfo.apkSize }
             var downloadedBytes = 0L
+            var lastPercent = -1
 
-            conn.inputStream.use { input ->
-                FileOutputStream(destinationFile).use { output ->
-                    val buffer = ByteArray(16 * 1024)
+            java.io.BufferedInputStream(conn.inputStream, 64 * 1024).use { input ->
+                java.io.BufferedOutputStream(FileOutputStream(destinationFile), 64 * 1024).use { output ->
+                    val buffer = ByteArray(64 * 1024)
                     var bytesRead: Int
                     while (input.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
                         downloadedBytes += bytesRead
                         if (totalBytes > 0) {
-                            val progress = (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
-                            _updateStatus.value = UpdateStatus.Downloading(progress)
+                            val progressPercent = ((downloadedBytes * 100L) / totalBytes).toInt()
+                            if (progressPercent != lastPercent) {
+                                lastPercent = progressPercent
+                                _updateStatus.value = UpdateStatus.Downloading(progressPercent / 100f)
+                            }
                         }
                     }
                     output.flush()

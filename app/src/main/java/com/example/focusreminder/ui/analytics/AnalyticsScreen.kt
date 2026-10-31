@@ -1980,11 +1980,7 @@ fun NeuCircleButton(
     }
 }
 
-private fun formatMinutes(minutes: Int): String {
-    val h = minutes / 60
-    val m = minutes % 60
-    return if (h > 0) "${h}h ${m}m" else "${m}m"
-}
+private fun formatMinutes(minutes: Int): String = com.example.focusreminder.util.formatCompactMinutes(minutes)
 
 private fun formatDuration(durationMs: Long): String {
     val totalSec = durationMs / 1000L

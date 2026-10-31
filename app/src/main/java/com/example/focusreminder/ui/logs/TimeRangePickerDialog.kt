@@ -18,6 +18,8 @@ import com.example.focusreminder.ui.components.NeuCard
 import com.example.focusreminder.ui.components.NeuPill
 import java.util.Locale
 
+import com.example.focusreminder.util.formatHourMinute12
+
 @Composable
 fun TimeRangePickerDialog(
     initialStartHour: Int = 9,
@@ -32,15 +34,6 @@ fun TimeRangePickerDialog(
     var startM by remember { mutableIntStateOf(initialStartMinute) }
     var endH by remember { mutableIntStateOf(initialEndHour) }
     var endM by remember { mutableIntStateOf(initialEndMinute) }
-
-    fun formatTime(hour: Int, min: Int): String {
-        val amPm = if (hour >= 12) "PM" else "AM"
-        val h12 = when (hour % 12) {
-            0 -> 12
-            else -> hour % 12
-        }
-        return String.format(Locale.getDefault(), "%02d:%02d %s", h12, min, amPm)
-    }
 
     Dialog(onDismissRequest = onDismiss) {
         NeuCard(
@@ -101,7 +94,7 @@ fun TimeRangePickerDialog(
                             Text("START TIME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted)
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                formatTime(startH, startM),
+                                formatHourMinute12(startH, startM),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,
@@ -130,7 +123,7 @@ fun TimeRangePickerDialog(
                             Text("END TIME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted)
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                formatTime(endH, endM),
+                                formatHourMinute12(endH, endM),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,

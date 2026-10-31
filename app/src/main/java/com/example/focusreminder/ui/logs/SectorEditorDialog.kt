@@ -26,6 +26,8 @@ import com.example.focusreminder.ui.components.NeuInsetWell
 import com.example.focusreminder.ui.components.NeuPill
 import java.util.Locale
 
+import com.example.focusreminder.util.formatHourMinute12
+
 @Composable
 fun SectorEditorDialog(
     initialSectors: List<TimeSector>,
@@ -34,15 +36,6 @@ fun SectorEditorDialog(
 ) {
     val context = LocalContext.current
     var sectors by remember { mutableStateOf(initialSectors.toMutableList()) }
-
-    fun formatTime(hour: Int, min: Int): String {
-        val amPm = if (hour >= 12) "PM" else "AM"
-        val h12 = when (hour % 12) {
-            0 -> 12
-            else -> hour % 12
-        }
-        return String.format(Locale.getDefault(), "%02d:%02d %s", h12, min, amPm)
-    }
 
     Dialog(onDismissRequest = onDismiss) {
         NeuCard(
@@ -182,7 +175,7 @@ fun SectorEditorDialog(
                                         ) {
                                             Text("START", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextMuted)
                                             Text(
-                                                formatTime(sector.startHour, sector.startMinute),
+                                                formatHourMinute12(sector.startHour, sector.startMinute),
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 fontFamily = FontFamily.Monospace,
@@ -218,7 +211,7 @@ fun SectorEditorDialog(
                                         ) {
                                             Text("END", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextMuted)
                                             Text(
-                                                formatTime(sector.endHour, sector.endMinute),
+                                                formatHourMinute12(sector.endHour, sector.endMinute),
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 fontFamily = FontFamily.Monospace,

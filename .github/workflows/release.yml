@@ -35,13 +35,13 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build Optimized Release APK
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Prepare APK Asset
         run: |
           mkdir -p releases
-          cp app/build/outputs/apk/debug/app-debug.apk releases/FocusReminder.apk
+          cp app/build/outputs/apk/release/app-release.apk releases/FocusReminder.apk
 
       - name: Create GitHub Release
         env:

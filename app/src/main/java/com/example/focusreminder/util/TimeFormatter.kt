@@ -71,3 +71,30 @@ fun formatRelativeCountdown(epochMs: Long, nowMs: Long = System.currentTimeMilli
         }
     }
 }
+
+/**
+ * Formats hour (0-23) and minute into standard 12-hour format with AM/PM (e.g. "09:30 AM", "04:15 PM").
+ * Single unified implementation used across Logbook, Sectors, and Dialogs.
+ */
+fun formatHourMinute12(hour: Int, min: Int): String {
+    val amPm = if (hour >= 12) "PM" else "AM"
+    val h12 = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+    return String.format(Locale.getDefault(), "%02d:%02d %s", h12, min, amPm)
+}
+
+/**
+ * Formats duration in minutes to compact string (e.g. "1h 45m" or "45m").
+ */
+fun formatCompactMinutes(minutes: Int): String {
+    val h = minutes / 60
+    val m = minutes % 60
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
+}
+
+/**
+ * Formats duration in milliseconds to compact string.
+ */
+fun formatDurationMs(durationMs: Long): String {
+    return formatCompactMinutes((durationMs / 60000L).toInt())
+}
+

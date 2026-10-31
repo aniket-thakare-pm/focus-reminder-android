@@ -86,15 +86,7 @@ class UsageLogsViewModel(application: Application) : AndroidViewModel(applicatio
         _customTimeRange.value = Pair(startMins, endMins)
         _selectedSectorId.value = null // Custom time overrides sector chip
 
-        fun formatTime(hour: Int, min: Int): String {
-            val amPm = if (hour >= 12) "PM" else "AM"
-            val h12 = when (hour % 12) {
-                0 -> 12
-                else -> hour % 12
-            }
-            return String.format(Locale.getDefault(), "%02d:%02d %s", h12, min, amPm)
-        }
-        _customTimeRangeFormatted.value = "${formatTime(startH, startM)} – ${formatTime(endH, endM)}"
+        _customTimeRangeFormatted.value = "${com.example.focusreminder.util.formatHourMinute12(startH, startM)} – ${com.example.focusreminder.util.formatHourMinute12(endH, endM)}"
     }
 
     fun clearCustomTimeRange() {
