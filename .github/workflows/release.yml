@@ -32,13 +32,6 @@ jobs:
         run: |
           echo "$GOOGLE_SERVICES" > app/google-services.json
 
-      - name: Restore Matching Android Signing Keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE }}
-        run: |
-          mkdir -p ~/.android
-          echo "$KEYSTORE_BASE64" | base64 --decode > ~/.android/debug.keystore
-
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 

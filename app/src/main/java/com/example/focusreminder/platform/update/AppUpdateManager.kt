@@ -3,16 +3,12 @@ package com.example.focusreminder.platform.update
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -27,13 +23,11 @@ sealed class UpdateStatus {
     object Idle : UpdateStatus()
     object Checking : UpdateStatus()
     data class Available(val info: UpdateInfo) : UpdateStatus()
-    data class Downloading(val progress: Float) : UpdateStatus()
-    data class ReadyToInstall(val apkFile: File) : UpdateStatus()
-    data class Error(val message: String) : UpdateStatus()
 }
 
 /**
- * Manages OTA in-app updates directly from GitHub Releases.
+ * Manages checking for GitHub Releases.
+ * When an update is available, routes user to the verified GitHub download page with zero special permissions.
  */
 object AppUpdateManager {
     private const val GITHUB_REPO = "aniket-thakare-pm/focus-reminder-android"
@@ -69,7 +63,7 @@ object AppUpdateManager {
             val cleanTagName = rawTagName.removePrefix("v").trim()
             val body = json.optString("body", "Bug fixes and improvements.").trim()
 
-            // Find APK asset in assets array
+            // Find APK asset
             var downloadUrl = ""
             var apkSize = 0L
             val assets = json.optJSONArray("assets")
@@ -86,8 +80,7 @@ object AppUpdateManager {
             }
 
             if (downloadUrl.isEmpty()) {
-                _updateStatus.value = UpdateStatus.Idle
-                return@withContext null
+                downloadUrl = json.optString("html_url", "https://github.com/$GITHUB_REPO/releases/latest")
             }
 
             // Compare versions
@@ -105,98 +98,23 @@ object AppUpdateManager {
                 _updateStatus.value = UpdateStatus.Idle
                 return@withContext null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             _updateStatus.value = UpdateStatus.Idle
             return@withContext null
         }
     }
 
-    suspend fun downloadAndInstallApk(context: Context, updateInfo: UpdateInfo) = withContext(Dispatchers.IO) {
+    fun openUpdateInBrowser(context: Context, downloadUrl: String) {
         try {
-            _updateStatus.value = UpdateStatus.Downloading(0f)
-
-            val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
-            val destinationFile = File(updatesDir, "FocusReminder.apk")
-            if (destinationFile.exists()) destinationFile.delete()
-
-            // Handle potential HTTP 302 redirects from GitHub to AWS S3
-            var currentUrl = updateInfo.downloadUrl
-            var conn: HttpURLConnection
-            var redirectCount = 0
-
-            while (true) {
-                conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                    instanceFollowRedirects = false
-                    setRequestProperty("User-Agent", "FocusReminderApp")
-                }
-                val code = conn.responseCode
-                if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
-                    val location = conn.getHeaderField("Location")
-                    conn.disconnect()
-                    currentUrl = location
-                    redirectCount++
-                    if (redirectCount > 5) throw IllegalStateException("Too many redirects")
-                } else if (code == 200) {
-                    break
-                } else {
-                    throw IllegalStateException("Failed to download APK: HTTP $code")
-                }
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-
-            val totalBytes = conn.contentLength.toLong().let { if (it > 0) it else updateInfo.apkSize }
-            var downloadedBytes = 0L
-            var lastPercent = -1
-
-            java.io.BufferedInputStream(conn.inputStream, 64 * 1024).use { input ->
-                java.io.BufferedOutputStream(FileOutputStream(destinationFile), 64 * 1024).use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        downloadedBytes += bytesRead
-                        if (totalBytes > 0) {
-                            val progressPercent = ((downloadedBytes * 100L) / totalBytes).toInt()
-                            if (progressPercent != lastPercent) {
-                                lastPercent = progressPercent
-                                _updateStatus.value = UpdateStatus.Downloading(progressPercent / 100f)
-                            }
-                        }
-                    }
-                    output.flush()
-                }
-            }
-
-            _updateStatus.value = UpdateStatus.ReadyToInstall(destinationFile)
-            withContext(Dispatchers.Main) {
-                installApk(context, destinationFile)
-            }
-        } catch (e: Exception) {
-            _updateStatus.value = UpdateStatus.Error(e.message ?: "Download failed")
-        }
-    }
-
-    fun installApk(context: Context, apkFile: File) {
-        try {
-            val apkUri: Uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                apkFile
-            )
-
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(installIntent)
+            context.startActivity(intent)
         } catch (_: Exception) {
-            // Error handling if unknown sources intent cannot launch
         }
     }
 
     private fun isVersionNewer(candidate: String, current: String): Boolean {
-        // e.g. candidate: "1.17.0", current: "1.16.0"
         val cParts = candidate.split(".").mapNotNull { it.toIntOrNull() }
         val curParts = current.split(".").mapNotNull { it.toIntOrNull() }
 

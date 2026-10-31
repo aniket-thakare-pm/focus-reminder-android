@@ -12,8 +12,17 @@ android {
         applicationId = "com.productivity.focusreminder"
         minSdk = 29
         targetSdk = 36
-        versionCode = 26
-        versionName = "1.16.2"
+        versionCode = 27
+        versionName = "1.16.3"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("${rootDir}/keystore/app-release.jks")
+            storePassword = "focusreminder123"
+            keyAlias = "focusreminder"
+            keyPassword = "focusreminder123"
+        }
     }
 
     buildTypes {
@@ -21,7 +30,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
